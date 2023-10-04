@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>ChatGPT Translate</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <img alt="OpenAI" src="../icons/openai.svg" width="100" height="70"/>
+        <h3>
+            Connect with OpenAI for data control
+        </h3>
+        <a href="https://platform.openai.com/account/api-keys" target="_blank">
+            <button class="btn">Get OpenAI Key</button>
+        </a>
+        <hr class="hr" />
+       
+        <div id="error"></div>
+
+        <div class="form-horizontal">
+            <div class="form-control">
+                <label class="form-label">API Key<span style="color:red;">*</span></label>
+                <input type="text" id="openai-key" placeholder="sk-***" maxlength="51"/>
+            </div>
+            <div class="form-control">
+                <label class="form-label">Native language</label>
+                <select id="lang">
+                </select>
+            </div>
+            <div class="form-control">
+                <label class="form-label">Default features</label>
+                <select id="type">
+                    <option value="chatgpt-translate">Translate</option>
+                    <option value="chatgpt-explain">Explain</option>
+                    <option value="chatgpt-summarize">Summarize</option>
+                    <option value="chatgpt-rewrite">Rewrite</option>
+                </select>
+            </div>
+            <div class="form-control">
+                <label class="form-label">Pop-up setting</label>
+                <select id="setting">
+                    <option value="display_icon">Display icon</option>
+                    <option value="immediately">Immediately display</option>
+                    <option value="hide">Don't display</option>
+                </select>
+            </div>
+            <div class="form-control btn-save">
+                <button id="btn-save">Save</button>
+            </div>
+        </div>
+        <div class="footer">
+            Powered by <a target="_blank" href="https://www.facebook.com/hiepgv37/">giaphiep</a>
+        </div>
+        <script type="module" src="popup.ts"></script>
+    </div>
+</body>
+</html>

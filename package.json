@@ -1,0 +1,36 @@
+{
+  "name": "chatgpt-smartify",
+  "private": true,
+  "version": "0.0.6",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giaphiep/chatgpt-smartify"
+  },
+  "scripts": {
+    "build": "vite build && cp -r src/icons extension && cp src/manifest.json extension && mv extension/src/popup/index.html extension/popup && rm -r extension/src",
+    "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx"
+  },
+  "dependencies": {
+    "@types/chrome": "^0.0.213",
+    "@types/crypto-js": "^4.1.2",
+    "@types/node": "^18.11.18",
+    "@typescript-eslint/eslint-plugin": "^5.52.0",
+    "@typescript-eslint/parser": "^5.52.0",
+    "build": "^0.1.4",
+    "crypto-js": "^4.1.1",
+    "eslint": "^8.34.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-airbnb-typescript": "^17.0.0",
+    "eslint-config-prettier": "^8.6.0",
+    "eslint-import-resolver-alias": "^1.1.2",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-prettier": "^4.2.1",
+    "openai": "^4.10.0",
+    "prettier": "^2.8.4",
+    "terser": "^5.16.1",
+    "typescript": "^4.9.4",
+    "vite": "^4.0.4"
+  }
+}

@@ -1,0 +1,85 @@
+* {
+    box-sizing:border-box;
+}
+body {
+    font-size: 14px;
+    color: #000;
+    background-color: #fff;
+}
+.container {
+    height: 580px;
+    width: 320px;
+    margin: 0 auto;
+    text-align: center;
+    padding: 15px;
+}
+.container h3 {
+    font-size: 14px;
+}
+.btn {
+    height: 38px;
+    width: 200px;
+    background-color: #eee;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.btn:hover {
+    background-color: darkgray;
+}
+.hr {
+    margin: 20px 0;
+    border: 0.5px solid #eee;
+}
+#error {
+    color: red;
+    display:none;
+}
+.form-horizontal {
+    display: flex;
+    flex-direction: column;
+}
+.form-control {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: start;
+}
+.form-control label {
+    margin-bottom: 8px;
+}
+
+.form-control input, .form-control select {
+    height: 38px;
+    width: 100%;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    text-indent: 10px;
+}
+.form-control input:focus, .form-control select:focus {
+    border-color: #01539d;
+    box-shadow: 0 0 0 2px rgba(255, 55, 5, 0.06);
+    border-inline-end-width: 1px;
+    outline: 0;
+}
+.btn-save {
+    align-items: center;
+}
+.form-control button {
+    border-radius: 8px;
+    margin-top: 15px;
+    border: 0;
+    width: 200px;
+    height: 38px;
+    background-color: #01539d;
+    color: #fff;
+    cursor: pointer;
+}
+.form-control button:hover {
+   opacity: 0.8;
+}
+.footer {
+    margin-top: 15px;
+    margin-bottom: 20px;
+}
