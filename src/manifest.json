@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "ChatGPT Translate",
+    "name": "ChatGPT Wizard",
     "description": "Helping you understand language content with ChatGPT",
     "version": "1.0",
     "icons": {
@@ -21,7 +21,7 @@
         }
     ],
     "action": {
-        "default_title": "ChatGPT Explain",
+        "default_title": "ChatGPT Wizard",
         "default_icon": "icons/icon-64.png",
         "default_popup": "popup/index.html"
     },
@@ -39,7 +39,7 @@
     },
     "content_scripts": [{
         "js": ["content_scripts/index.js"],
-        "css": ["assets/index-c5ed3106.css"],
+        "css": ["assets/index-f0de8e51.css"],
         "matches": ["https://*/*", "http://*/*"]
     }]
 }

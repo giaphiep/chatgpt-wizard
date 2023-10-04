@@ -6,7 +6,7 @@ chrome.runtime.onInstalled.addListener(async () => {
         url,
         type: 'popup',
         width: 320,
-        height: 580,
+        height: 300,
     })
 })
 
@@ -18,6 +18,7 @@ const sendToContentScript = (payload: { port: chrome.runtime.Port, action: strin
         message: message,
     })
 }
+
 const handleHistory = async (nativeLang: string, text: string) => {
     const chatHistory = await getChatHistory()
     const message = [
@@ -44,7 +45,7 @@ const handleHistory = async (nativeLang: string, text: string) => {
 }
 
 const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, text: string, type: string}) => {
-    const { openaiKey, nativeLang } = await getDataFromStorage()
+    const { openaiKey, nativeLang, model } = await getDataFromStorage()
    
     let prompt  = `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation.`;
     if (input.type === 'chatgpt-explain') {
@@ -63,9 +64,11 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
         },
         {
             role: 'user', 
-            content: input.text
+            content: input.text.trim()
         },
     ]
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
     try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -75,16 +78,17 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
                 Authorization: `Bearer ${openaiKey}`,
             },
             body: JSON.stringify({
-                model: 'gpt-3.5-turbo',
+                model: model,
                 messages: message,
                 temperature: 0,
-                max_tokens: 1000,
+                // max_tokens: 1000,
                 top_p: 1,
                 frequency_penalty: 1,
                 presence_penalty: 1,
                 stream: true
                  // Enable streaming mode
             }),
+            signal: signal,
         });
         if (!response.body) {
             console.error('ReadableStream not yet supported in this browser.')
@@ -163,14 +167,27 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
         }
       
     } catch (error) {
-        sendToContentScript({
-            port,
-            action: 'chatGPTResponse',
-            message: {
-                success: false,
-                token: error.message,
-            }
-        });
+
+        if (error.name === 'AbortError') {
+            console.log('Fetch was aborted');
+            sendToContentScript({
+                port,
+                action: 'chatGPTResponse',
+                message: {
+                    success: false,
+                    token: 'Fetch was aborted',
+                }
+            });
+        } else {
+            sendToContentScript({
+                port,
+                action: 'chatGPTResponse',
+                message: {
+                    success: false,
+                    token: error.message,
+                }
+            });
+        }
     } 
 
 }
@@ -184,8 +201,8 @@ chrome.runtime.onConnect.addListener(port => {
 })
 
 chrome.contextMenus.create({
-    id: 'chatgpt-smartify',
-    title: 'ChatGPT smartify',
+    id: 'chatgpt-wizard',
+    title: 'ChatGPT Wizard',
     contexts: ['selection'],
 }, () => {
     if (chrome.runtime.lastError) {
@@ -195,28 +212,28 @@ chrome.contextMenus.create({
 
         chrome.contextMenus.create({
             id: 'chatgpt-translate',
-            parentId: 'chatgpt-smartify',
+            parentId: 'chatgpt-wizard',
             title: 'Translate',
             contexts: ['selection'],
         });
 
         chrome.contextMenus.create({
             id: 'chatgpt-explain',
-            parentId: 'chatgpt-smartify',
+            parentId: 'chatgpt-wizard',
             title: 'Explain',
             contexts: ['selection'],
         });
 
         chrome.contextMenus.create({
             id: 'chatgpt-summarize',
-            parentId: 'chatgpt-smartify',
+            parentId: 'chatgpt-wizard',
             title: 'Summarize',
             contexts: ['selection'],
         });
         
         chrome.contextMenus.create({
             id: 'chatgpt-rewrite',
-            parentId: 'chatgpt-smartify',
+            parentId: 'chatgpt-wizard',
             title: 'Rewrite',
             contexts: ['selection'],
         });

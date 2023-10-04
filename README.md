@@ -1,20 +1,22 @@
-# ChatGPT Smartify
+# ChatGPT Wizard
 
 Download link:
 
 A Chrome extension (manifest v3) that uses ChatGPT translate, explain, sumarize, rewrite highlighted text.
 
-Select unknown sentence, and let's ChatGPT Smartify help you.
+Select unknown sentence, and let's ChatGPT Wizard help you.
 
-![](https://gitlab.com/warren30815/hey_chatgpt_explain_this/raw/main/screenshot1.png)
+![Screenshot1](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshot1.png)
+![Screenshot2](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshot2.png)
+![Screenshot3](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshot3.png)
 
-Demo Video:
+Demo Video: https://www.youtube.com/watch?v=gJEhSeR-YTw
 
 ## Usage
 
 1. Install the extension, and you will see a popup window.
 2. Visit [OpenAI website](https://platform.openai.com/account/api-keys) to get API key.
-3. Register your OpenAI API KEY to the input field.
+3. Register your OpenAI API KEY to the input field and other fields
 4. Once finished, you can highlight some sentence in any website. You will find a icon button when you release your mouse and click it.
 5. **Done!**
 

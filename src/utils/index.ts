@@ -158,20 +158,22 @@ export const iso6391Codes = [
     { code: 'zu', name: 'Zulu' },
 ]
 
-export const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: string; settingPopup?: string, type?: string }> => new Promise((resolve, reject) => {
-    chrome.storage.session.get(['nativeLang', 'settingPopup', 'openaiKey'], result => {
+export const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: string; settingPopup?: string, type?: string, model?: string }> => new Promise((resolve, reject) => {
+    chrome.storage.session.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model'], result => {
         if (chrome.runtime.lastError) {
             reject(chrome.runtime.lastError)
         } else {
             resolve({
                 openaiKey: result.openaiKey || '',
+                model: result.model || 'gpt-3.5-turbo',
                 nativeLang: result.nativeLang || 'en',
                 settingPopup: result.settingPopup || 'display_icon',
-                type: result.type || 'translate',
+                type: result.type || 'chatgpt-translate',
             })
         }
     })
 })
+
 export const getChatHistory = (): Promise<{ uuid: Array<{question: string, answer: string}> }> => new Promise((resolve, reject) => {
     chrome.storage.local.get(['uuid', 'settingPopup'], result => {
         if (chrome.runtime.lastError) {
