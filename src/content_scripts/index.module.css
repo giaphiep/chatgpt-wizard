@@ -61,12 +61,32 @@
 .popup {
     display: flex; 
     flex-direction: column; 
-    padding: 0 0 10px 0; 
+    justify-content: space-between;
+    padding: 0; 
     word-wrap: break-word
 }
 .popupHead {
     border-bottom: 1px solid #eee; 
     padding-bottom: 10px;
+    flex-grow: 0;
+}
+.popupFooter {
+  display: flex;
+  justify-content:center;
+  align-items: center;
+  font-size: 12px;
+  color: darkgrey;
+  margin-top: 10px;
+  flex-direction: column;
+  position: relative;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+}
+.popupFooter p {
+  font-size: 12px;
+  color: darkgrey;
+  margin-bottom: 0;
 }
 .popupTitle {
     margin-top: 0; 
@@ -84,6 +104,17 @@
     margin-top: 10px; 
     display: flex; 
     flex-direction: column;
+}
+.boxChatAsk {
+  height: 100%; 
+  overflow-y: auto; 
+  border: 1px solid #eee; 
+  padding: 10px; 
+  border-radius: 8px; 
+  margin-top: 10px; 
+  display: flex; 
+  flex-direction: column;
+  flex-grow: 2;
 }
 .question {
     display: flex; 
@@ -105,7 +136,9 @@
     justify-content: start; 
     margin-top: 10px;
     position: relative;
+    cursor: pointer;
 }
+
 .answerDetail {
     white-space: pre-wrap;
     max-width: 90%; 
@@ -116,15 +149,18 @@
     border-radius: 8px; 
     overflow-x: hidden;
     word-break: break-word;
+    cursor: pointer;
 }
 .copy {
   display: none;
 }
 .answer:hover .copy {
-  display: block;
+  display: flex;
+  align-items: center;
   position: absolute;
-  right: 0;
-  bottom: 0;
+  left: 0;
+  top: -20px;
+  cursor: pointer;
 }
 .typing {
     align-items: center;
@@ -134,41 +170,83 @@
     height: 21.5px;
   }
 
-  .typing_dot {
-    animation: mercuryTypingAnimation 1.8s infinite ease-in-out;
+.typing_dot {
+  animation: mercuryTypingAnimation 1.8s infinite ease-in-out;
+  background-color: darkgray;
+  border-radius: 50%;
+  height: 7px;
+  margin-right: 4px;
+  vertical-align: middle;
+  width: 7px;
+  display: inline-block;
+}
+.typing_dot:nth-child(1) {
+  animation-delay: 200ms;
+}
+.typing_dot:nth-child(2) {
+  animation-delay: 300ms;
+}
+.typing_dot:nth-child(3) {
+  animation-delay: 400ms;
+}
+.typing_dot:last-child {
+  margin-right: 0;
+}
+
+
+@keyframes mercuryTypingAnimation {
+  0% {
+    transform: translateY(0px);
     background-color: darkgray;
-    border-radius: 50%;
-    height: 7px;
-    margin-right: 4px;
-    vertical-align: middle;
-    width: 7px;
-    display: inline-block;
   }
-  .typing_dot:nth-child(1) {
-    animation-delay: 200ms;
+  28% {
+    transform: translateY(-7px);
+    background-color: darkgray;
   }
-  .typing_dot:nth-child(2) {
-    animation-delay: 300ms;
+  44% {
+    transform: translateY(0px);
+    background-color: darkgray;
   }
-  .typing_dot:nth-child(3) {
-    animation-delay: 400ms;
-  }
-  .typing_dot:last-child {
-    margin-right: 0;
-  }
-  
-  @keyframes mercuryTypingAnimation {
-    0% {
-      transform: translateY(0px);
-      background-color: darkgray;
-    }
-    28% {
-      transform: translateY(-7px);
-      background-color: darkgray;
-    }
-    44% {
-      transform: translateY(0px);
-      background-color: darkgray;
-    }
-  }
-  
+}
+
+.popupInput {
+  position: relative;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content:space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+textarea.questionInput {
+  width: 100%;
+  height: auto;
+  min-height: 45px;
+  max-height: 110px;
+  vertical-align: bottom;
+  transition: all .3s,height 0s;
+  resize: none;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 40px 12px 12px !important;
+  color: #000;
+  font-size: 14px;
+  background-color: #fff;
+  background-image: none;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #d9d9d9;
+  border-radius: 8px;
+}
+.btnSend {
+  position: absolute;
+  top: 50%;
+  right: 0%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  justify-content:center;
+  align-items: center;
+  cursor: pointer;
+}

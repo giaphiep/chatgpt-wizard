@@ -4,7 +4,7 @@ import { resolve } from 'path'
 const TRUE = 'true'
 
 const root = resolve(__dirname)
-const outDir = resolve(__dirname, 'extension')
+const outDir = resolve(__dirname, 'chatgpt-wizard')
 
 export default ({ mode, command }: { mode: string, command: string }) => {
     const ENV = loadEnv(mode, process.cwd()) // load (dev || prod) .env

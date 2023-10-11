@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "ChatGPT Wizard",
     "description": "Helping you understand language content with ChatGPT",
-    "version": "1.0",
+    "version": "1.1",
     "icons": {
         "16": "icons/icon-16.png",
         "32": "icons/icon-32.png",
@@ -28,10 +28,13 @@
     "permissions": [
         "storage",
         "contextMenus",
-        "activeTab"
+        "activeTab",
+        "clipboardWrite",
+        "identity",
+        "identity.email"
     ],
     "host_permissions": [
-        "*://*/*"
+        "https://api.openai.com/*"
     ],
     "background": {
         "service_worker": "background/index.js",
@@ -39,7 +42,7 @@
     },
     "content_scripts": [{
         "js": ["content_scripts/index.js"],
-        "css": ["assets/index-f0de8e51.css"],
+        "css": ["assets/index-ac16cf08.css"],
         "matches": ["https://*/*", "http://*/*"]
     }]
 }

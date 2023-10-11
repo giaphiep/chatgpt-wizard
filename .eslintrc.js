@@ -44,7 +44,7 @@ module.exports = {
         ExportDeclaration: { multiline: true, minProperties: 3 },
       },
     ],
-    'import/extensions': [
+    'import/chatgpt-wizard': [
       'error',
       'ignorePackages',
       {

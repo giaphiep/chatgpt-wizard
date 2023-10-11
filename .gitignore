@@ -10,7 +10,7 @@ bun.lockb
 yarn.lock
 
 node_modules
-extension
+chatgpt-wizard
 .env
 yarn.lock
 package-lock.json

@@ -15,7 +15,7 @@
       "noUnusedParameters": true,
       "allowUnreachableCode": false,
       "noFallthroughCasesInSwitch": true,
-      "outDir": "./extension",
+      "outDir": "./chatgpt-wizard",
       "declaration": true,
       "sourceMap": true,
       "esModuleInterop": true,

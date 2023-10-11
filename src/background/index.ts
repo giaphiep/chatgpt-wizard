@@ -1,14 +1,14 @@
 import { getDataFromStorage, getChatHistory, updateHistory } from '../utils'
 
-chrome.runtime.onInstalled.addListener(async () => {
-    const url = chrome.runtime.getURL('/popup/index.html')
-    chrome.windows.create({
-        url,
-        type: 'popup',
-        width: 320,
-        height: 300,
-    })
-})
+// chrome.runtime.onInstalled.addListener(async () => {
+//     const url = chrome.runtime.getURL('/popup/index.html')
+//     chrome.windows.create({
+//         url,
+//         type: 'popup',
+//         width: 320,
+//         height: 300,
+//     })
+// })
 
 const sendToContentScript = (payload: { port: chrome.runtime.Port, action: string, message: {success: boolean, token: string, id?: string} }) => {
     const { port, action, message } = payload
@@ -47,13 +47,17 @@ const handleHistory = async (nativeLang: string, text: string) => {
 const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, text: string, type: string}) => {
     const { openaiKey, nativeLang, model } = await getDataFromStorage()
    
-    let prompt  = `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation.`;
+    let prompt  = `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation`;
     if (input.type === 'chatgpt-explain') {
         prompt = `You are an expert translator. Please explain the above text use the language with locale code is "${nativeLang}"`
     } else if (input.type === 'chatgpt-summarize') {
-        prompt = `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible. Please use the language with locale code is "${nativeLang}"`
+        prompt = `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible`
     } else if (input.type === 'chatgpt-rewrite') {
-        prompt = `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence, ensuring it aligns with the expression of native speakers and use the language associated with the locale code "${nativeLang}"`
+        prompt = `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence, ensuring it aligns with the expression of native speakers`
+    } else if (input.type === 'chatgpt-grammar') {
+        prompt = `You will be given statements. Your task is to correct them to standard grammar`
+    } else if (input.type === 'chatgpt-ask') {
+        prompt = `You are a helpful assistant. Please use the language with locale code is "${nativeLang}"`
     }
     // get error
     // const message = await handleHistory(nativeLang, input.text);
@@ -237,18 +241,23 @@ chrome.contextMenus.create({
             title: 'Rewrite',
             contexts: ['selection'],
         });
+        chrome.contextMenus.create({
+            id: 'chatgpt-grammar',
+            parentId: 'chatgpt-wizard',
+            title: 'Grammar Correction',
+            contexts: ['selection'],
+        });
+        // chrome.contextMenus.create({
+        //     id: 'chatgpt-ask',
+        //     parentId: 'chatgpt-wizard',
+        //     title: 'Ask ChatGPT',
+        //     contexts: ['selection'],
+        // });
     }
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
     switch (info.menuItemId) {
-        case 'chatgpt-translate':
-            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-                chrome.tabs.sendMessage(tabs[0].id, {
-                    type: 'chatgpt-translate',
-                })
-            })
-            break;
         case 'chatgpt-explain':
             chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
                 chrome.tabs.sendMessage(tabs[0].id, {
@@ -270,6 +279,20 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 })
             })
             break;
+        case 'chatgpt-grammar':
+            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    type: 'chatgpt-grammar',
+                })
+            })
+            break;
+        // case 'chatgpt-ask':
+        //     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        //         chrome.tabs.sendMessage(tabs[0].id, {
+        //             type: 'chatgpt-ask',
+        //         })
+        //     })
+        //     break;
         default:
             chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
                 chrome.tabs.sendMessage(tabs[0].id, {

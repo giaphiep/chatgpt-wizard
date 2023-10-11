@@ -1,5 +1,91 @@
 type QA = { question: string, answer: string };
 
+// Create a random salt
+const generateSalt = (): Uint8Array => crypto.getRandomValues(new Uint8Array(16));
+// Derive a cryptographic key from a password using PBKDF2
+const getKey = async (password: string, salt: Uint8Array): Promise<CryptoKey> => {
+    const encoder = new TextEncoder();
+    const importedKey = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(password),
+      { name: "PBKDF2" },
+      false,
+      ["deriveBits", "deriveKey"]
+    );
+  
+    return crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: salt,
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      importedKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+};
+
+const arrayBufferToBase64 = (buffer: Uint8Array): string => {
+    return btoa(String.fromCharCode(...buffer));
+}
+  
+// Convert Base64 string to Uint8Array
+const base64ToArrayBuffer = (base64: string): Uint8Array => {
+let binaryString = atob(base64);
+let length = binaryString.length;
+let bytes = new Uint8Array(length);
+for (let i = 0; i < length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+}
+return bytes;
+}
+
+// Encrypt a piece of data
+export const encrypt = async (data: string, password: string): Promise<string> => {
+    const encoder = new TextEncoder();
+    const salt = generateSalt();
+    const key = await getKey(password, salt);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encryptedData = await crypto.subtle.encrypt(
+        {
+        name: "AES-GCM",
+        iv: iv,
+        },
+        key,
+        encoder.encode(data)
+    );
+
+    const combined = new Uint8Array(salt.byteLength + iv.byteLength + encryptedData.byteLength);
+    combined.set(new Uint8Array(salt), 0);
+    combined.set(new Uint8Array(iv), salt.byteLength);
+    combined.set(new Uint8Array(encryptedData), salt.byteLength + iv.byteLength);
+    
+    return arrayBufferToBase64(combined);
+};
+// Decrypt a piece of data
+export const decrypt = async (data: string, password: string): Promise<string> => {
+    if (!data) return '';
+    const dataArray = base64ToArrayBuffer(data);
+
+    const decoder = new TextDecoder();
+    const salt = dataArray.slice(0, 16);
+    const iv = dataArray.slice(16, 28);
+    const encryptedData = dataArray.slice(28);
+    const key = await getKey(password, salt);
+    const decryptedData = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: iv,
+      },
+      key,
+      encryptedData
+    );
+  
+    return decoder.decode(decryptedData);
+};
+
 export const validKey = async (key: string): Promise<any> => {
     try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -158,13 +244,30 @@ export const iso6391Codes = [
     { code: 'zu', name: 'Zulu' },
 ]
 
-export const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: string; settingPopup?: string, type?: string, model?: string }> => new Promise((resolve, reject) => {
-    chrome.storage.session.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model'], result => {
+export const getProfileUserInfo = (): Promise<{ id: string, email: string }> => new Promise((resolve, reject) => {
+    chrome.identity.getProfileUserInfo({ 'accountStatus': chrome.identity.AccountStatus.ANY }, result => {
         if (chrome.runtime.lastError) {
             reject(chrome.runtime.lastError)
         } else {
             resolve({
-                openaiKey: result.openaiKey || '',
+                id: result.id || '',
+                email: result.email || '',
+            })
+        }
+    })
+})
+
+export const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: string; settingPopup?: string, type?: string, model?: string }> => new Promise((resolve, reject) => {
+    chrome.storage.local.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model'], async result => {
+        if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError)
+        } else {
+
+            const {id}= await getProfileUserInfo()
+           
+            const openaiKey = await decrypt(result.openaiKey, id || 'default')
+            resolve({
+                openaiKey: openaiKey || '',
                 model: result.model || 'gpt-3.5-turbo',
                 nativeLang: result.nativeLang || 'en',
                 settingPopup: result.settingPopup || 'display_icon',
@@ -173,6 +276,8 @@ export const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: 
         }
     })
 })
+
+
 
 export const getChatHistory = (): Promise<{ uuid: Array<{question: string, answer: string}> }> => new Promise((resolve, reject) => {
     chrome.storage.local.get(['uuid', 'settingPopup'], result => {
@@ -204,4 +309,5 @@ export const updateHistory = (question: string, answer: string): Promise<QA> => 
         });
     });
 };
+
 
