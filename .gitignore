@@ -11,6 +11,7 @@ yarn.lock
 
 node_modules
 chatgpt-wizard
+chatgpt-wizard.zip
 .env
 yarn.lock
 package-lock.json

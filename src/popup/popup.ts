@@ -1,4 +1,4 @@
-import { validKey, listModels, iso6391Codes, getDataFromStorage, getProfileUserInfo, encrypt } from '../utils'
+import { validKey, listModels, iso6391Codes, getDataFromStorage, encrypt, generateID } from '../utils'
 
 document.addEventListener('DOMContentLoaded', async () => {
 
@@ -53,7 +53,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     btnContinue.onclick = async () => {
-
         // validate
         if (openai.value.trim() === '') {
             errorDiv.innerText = 'Please enter API key'
@@ -125,18 +124,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             return
         } else {
             
-            const { id }= await getProfileUserInfo()
-            const openaiKey = await  encrypt(openai.value, id || 'default')
+            const id = generateID(32)
+            const openaiKey = await  encrypt(openai.value, id)
             errorDiv.style.display = 'none'
-       
-            // chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
-            
+
             chrome.storage.local.set({
                 nativeLang,
                 settingPopup,
                 openaiKey,
+                type,
+                id,
                 model: model.value,
-                type
+               
             })
             window.close()
         }

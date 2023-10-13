@@ -1,4 +1,13 @@
-type QA = { question: string, answer: string };
+type QA = { question: string, answer: string }
+
+export interface StorageLocal {
+    openaiKey: string; 
+    nativeLang?: string; 
+    settingPopup?: string, 
+    type?: string, 
+    model?: string, 
+    id?: string
+}
 
 // Create a random salt
 const generateSalt = (): Uint8Array => crypto.getRandomValues(new Uint8Array(16));
@@ -244,70 +253,73 @@ export const iso6391Codes = [
     { code: 'zu', name: 'Zulu' },
 ]
 
-export const getProfileUserInfo = (): Promise<{ id: string, email: string }> => new Promise((resolve, reject) => {
-    chrome.identity.getProfileUserInfo({ 'accountStatus': chrome.identity.AccountStatus.ANY }, result => {
-        if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError)
-        } else {
-            resolve({
-                id: result.id || '',
-                email: result.email || '',
-            })
-        }
-    })
-})
+export const generateID = (length: number): string => {
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
-export const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: string; settingPopup?: string, type?: string, model?: string }> => new Promise((resolve, reject) => {
-    chrome.storage.local.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model'], async result => {
+export const getDataFromStorage = (): Promise<StorageLocal> => new Promise((resolve, reject) => {
+    chrome.storage.local.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model', 'id'], async result => {
         if (chrome.runtime.lastError) {
             reject(chrome.runtime.lastError)
         } else {
 
-            const {id}= await getProfileUserInfo()
-           
-            const openaiKey = await decrypt(result.openaiKey, id || 'default')
+            const openaiKey = await decrypt(result.openaiKey, result.id)
             resolve({
                 openaiKey: openaiKey || '',
                 model: result.model || 'gpt-3.5-turbo',
                 nativeLang: result.nativeLang || 'en',
                 settingPopup: result.settingPopup || 'display_icon',
                 type: result.type || 'chatgpt-translate',
+                id: result.id,
             })
         }
     })
 })
 
-
-
-export const getChatHistory = (): Promise<{ uuid: Array<{question: string, answer: string}> }> => new Promise((resolve, reject) => {
-    chrome.storage.local.get(['uuid', 'settingPopup'], result => {
-        if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError)
-        } else {
-            resolve({
-                uuid: result.uuid || [],
-            })
-        }
-    })
-})
-
-export const updateHistory = (question: string, answer: string): Promise<QA> => {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(['uuid'], (result: { uuid?: QA[] }) => {
-            // Get the current uuid array, or use an empty array if it doesn't exist
-            const currentUuidArray: QA[] = result.uuid || [];
+export const updateHistory = (uuidKey: string, chat: QA): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get([`${uuidKey}`], (result) => {
+            const chatHistory: QA[] = result[uuidKey] || [];
+            chatHistory.push(chat);      
             
-            // Append the new object
-            currentUuidArray.push({ question, answer });
-            
-            // Save the updated uuid array back to storage
-            chrome.storage.local.set({uuid: currentUuidArray}, () => {
-                console.log('Uuid updated to ', currentUuidArray);
-                
-                resolve({ question, answer });
+            // Ensure only the last 8 chats are kept
+            const MAX_CHATS = 8;
+            while (chatHistory.length > MAX_CHATS) {
+                chatHistory.shift();  // Remove the oldest chat
+            }
+            // Save the updated chatHistory back to storage
+            chrome.storage.local.set({ [uuidKey]: chatHistory }, () => {
+                if (chrome.runtime.lastError) {
+                    reject(chrome.runtime.lastError);
+                } else {
+                    resolve();
+                }
             });
         });
     });
 };
-
-
+export const getChatHistory = (uuidKey: string): Promise<QA[] | []> => {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get([`${uuidKey}`], (result) => {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+            } else {
+                const chatHistory: QA[] = result[uuidKey] || [];
+                resolve(chatHistory);
+            }
+        });
+    });
+};
+export const removeChatHistory = (uuidKey: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        // First, retrieve the current chatHistory from storage
+        chrome.storage.local.remove([`${uuidKey}`], () => {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+            }
+            resolve();
+        });
+    });
+};

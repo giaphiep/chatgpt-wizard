@@ -1,16 +1,28 @@
 import { getDataFromStorage, getChatHistory, updateHistory } from '../utils'
+type Status = 'stream' | 'done' | 'error'
+type QA = { question: string, answer: string };
 
-// chrome.runtime.onInstalled.addListener(async () => {
-//     const url = chrome.runtime.getURL('/popup/index.html')
-//     chrome.windows.create({
-//         url,
-//         type: 'popup',
-//         width: 320,
-//         height: 300,
-//     })
-// })
+interface Input {
+    text: string;
+    uuid?: string;
+    nativeLang?: string;
+    type?: string;
+}
+interface Message {
+    status?: Status;
+    token?: string;
+    chat?: QA,
+    uuid?: string;
+    id?: string;
+    type?: string;
+}
+interface Payload {
+    port: chrome.runtime.Port;
+    action: string;
+    message: Message;
+}
 
-const sendToContentScript = (payload: { port: chrome.runtime.Port, action: string, message: {success: boolean, token: string, id?: string} }) => {
+const sendToContentScript = (payload: Payload) => {
     const { port, action, message } = payload
     port.postMessage({
         action,
@@ -18,59 +30,66 @@ const sendToContentScript = (payload: { port: chrome.runtime.Port, action: strin
         message: message,
     })
 }
+const systemPropmt = (type: string, nativeLang?: string) => {
+    let prompt  = `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation`;
+    if (type === 'chatgpt-explain') {
+        prompt = `You are an expert translator. Please explain the above text use the language with locale code is "${nativeLang}"`
+    } else if (type === 'chatgpt-summarize') {
+        prompt = `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible`
+    } else if (type === 'chatgpt-rewrite') {
+        prompt = `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence, ensuring it aligns with the expression of native speakers`
+    } else if (type === 'chatgpt-grammar') {
+        prompt = `You will be given statements. Your task is to correct them to standard grammar`
+    } else if (type === 'chatgpt-ask') {
+        prompt = `Please answer in the language with the locale code ${nativeLang}. You are a helpful assistant`
+    }
+    return prompt
+}
 
-const handleHistory = async (nativeLang: string, text: string) => {
-    const chatHistory = await getChatHistory()
+const handleHistory = async (input: Input) =>  {
+    const chatHistory = await getChatHistory(input.uuid)
+    const prompt = systemPropmt(input.type, input.nativeLang)
+
     const message = [
-        { role: 'system', content: `You are a helpful AI. Please answer using language with locale code is "${nativeLang}"` },
+        { role: 'system', content: prompt}
     ]
     // old history
-    for(let [_, conversation] of Object.entries(chatHistory)) {
-        for(let value of conversation) {
+    if (chatHistory.length > 0) {
+        for(let value of chatHistory) {
             message.push({
                 role: 'user',
                 content: value.question
             })
             message.push({
-                role: 'AI',
+                role: 'assistant',
                 content: value.answer
             })
         }
     }
     message.push({
         role: 'user',
-        content: text
+        content: input.text
     })
     return message
 }
 
-const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, text: string, type: string}) => {
+const chatGPTResponse = async (port: chrome.runtime.Port, input: Input) => {
     const { openaiKey, nativeLang, model } = await getDataFromStorage()
-   
-    let prompt  = `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation`;
-    if (input.type === 'chatgpt-explain') {
-        prompt = `You are an expert translator. Please explain the above text use the language with locale code is "${nativeLang}"`
-    } else if (input.type === 'chatgpt-summarize') {
-        prompt = `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible`
-    } else if (input.type === 'chatgpt-rewrite') {
-        prompt = `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence, ensuring it aligns with the expression of native speakers`
-    } else if (input.type === 'chatgpt-grammar') {
-        prompt = `You will be given statements. Your task is to correct them to standard grammar`
-    } else if (input.type === 'chatgpt-ask') {
-        prompt = `You are a helpful assistant. Please use the language with locale code is "${nativeLang}"`
-    }
-    // get error
-    // const message = await handleHistory(nativeLang, input.text);
-    const message = [
+    const prompt = systemPropmt(input.type, nativeLang)
+    let message = [
         {
             role: 'system', 
-             content: prompt
+                content: prompt
         },
         {
             role: 'user', 
             content: input.text.trim()
         },
     ]
+    if (input.type === 'chatgpt-ask') {
+        message = await handleHistory(input)
+    }
+
     const abortController = new AbortController();
     const signal = abortController.signal;
 
@@ -84,37 +103,31 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
             body: JSON.stringify({
                 model: model,
                 messages: message,
-                temperature: 0,
-                // max_tokens: 1000,
-                top_p: 1,
-                frequency_penalty: 1,
-                presence_penalty: 1,
                 stream: true
-                 // Enable streaming mode
             }),
             signal: signal,
         });
         if (!response.body) {
-            console.error('ReadableStream not yet supported in this browser.')
             sendToContentScript({
                 port,
                 action: 'chatGPTResponse',
                 message: {
-                    success: false,
+                    status: 'stream',
                     token: 'ReadableStream not yet supported in this browser. Please update your browser',
+                    type: input.type || 'chatgpt-translate'
                 }
             });
             return
         }
 
         if (response.status !== 200) {
-            console.error('Incorrect API key. Please update API key!')
             sendToContentScript({
                 port,
                 action: 'chatGPTResponse',
                 message: {
-                    success: false,
+                    status: 'stream',
                     token: 'Incorrect API key. Please update API key!',
+                    type: input.type || 'chatgpt-translate'
                 }
             });
             return
@@ -123,11 +136,11 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let answer = ''
+        let id = ''
         try {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) {
-                  await updateHistory(input.text, answer)
                   break;
                 }
                 // Massage and parse the chunk of data
@@ -144,8 +157,11 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
                     }
                   }); // Parse the JSON string
           
-                for (const parsedLine of parsedLines) {
+                for (const [index, parsedLine] of parsedLines.entries()) {
                     if (parsedLine) {
+                        if (index === 0) {
+                            id = parsedLine.id
+                        }
                         const { choices } = parsedLine;
                         const { delta } = choices[0];
                         const { content } = delta;
@@ -156,9 +172,10 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
                                 port,
                                 action: 'chatGPTResponse',
                                 message: {
-                                    success: true,
+                                    status: 'stream',
                                     id: parsedLine.id,
                                     token: content,
+                                    type: input.type || 'chatgpt-translate',
                                 }
                             });
                         }
@@ -169,7 +186,25 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
             port.disconnect()
             reader.releaseLock()
         }
-      
+
+        // update history chat
+        if (answer.length > 0) {
+            const chat = { question: input.text, answer: answer}
+            updateHistory(input.uuid, chat)
+
+            // send status done to content script
+            sendToContentScript({
+                port,
+                action: 'chatGPTResponse',
+                message: {
+                    status: 'done',
+                    id: id,
+                    uuid: input.uuid,
+                    chat: chat,
+                    type: input.type || 'chatgpt-translate'
+                }
+            });
+        }
     } catch (error) {
 
         if (error.name === 'AbortError') {
@@ -178,8 +213,9 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
                 port,
                 action: 'chatGPTResponse',
                 message: {
-                    success: false,
+                    status: 'stream',
                     token: 'Fetch was aborted',
+                    type: input.type || 'chatgpt-translate'
                 }
             });
         } else {
@@ -187,8 +223,9 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
                 port,
                 action: 'chatGPTResponse',
                 message: {
-                    success: false,
+                    status: 'stream',
                     token: error.message,
+                    type: input.type || 'chatgpt-translate'
                 }
             });
         }
@@ -198,7 +235,7 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: {uuid: string, 
 
 chrome.runtime.onConnect.addListener(port => {
     if (port.name.startsWith('content-script')) {
-        port.onMessage.addListener(async (message: {text: string, uuid: string, type: string}) => {
+        port.onMessage.addListener(async (message: Input) => {
             await chatGPTResponse(port, message)
         })
     }
@@ -247,12 +284,12 @@ chrome.contextMenus.create({
             title: 'Grammar Correction',
             contexts: ['selection'],
         });
-        // chrome.contextMenus.create({
-        //     id: 'chatgpt-ask',
-        //     parentId: 'chatgpt-wizard',
-        //     title: 'Ask ChatGPT',
-        //     contexts: ['selection'],
-        // });
+        chrome.contextMenus.create({
+            id: 'chatgpt-ask',
+            parentId: 'chatgpt-wizard',
+            title: 'Ask ChatGPT',
+            contexts: ['selection'],
+        });
     }
 });
 
@@ -286,13 +323,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 })
             })
             break;
-        // case 'chatgpt-ask':
-        //     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        //         chrome.tabs.sendMessage(tabs[0].id, {
-        //             type: 'chatgpt-ask',
-        //         })
-        //     })
-        //     break;
+        case 'chatgpt-ask':
+            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    type: 'chatgpt-ask',
+                })
+            })
+            break;
         default:
             chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
                 chrome.tabs.sendMessage(tabs[0].id, {
