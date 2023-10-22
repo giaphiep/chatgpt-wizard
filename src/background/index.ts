@@ -1,5 +1,5 @@
 import { getDataFromStorage, getChatHistory, updateHistory } from '../utils'
-type Status = 'stream' | 'done' | 'error'
+type Status = 'stream' | 'done' | 'stop'
 type QA = { question: string, answer: string };
 
 interface Input {
@@ -7,6 +7,8 @@ interface Input {
     uuid?: string;
     nativeLang?: string;
     type?: string;
+    action: string;
+    language?: string;
 }
 interface Message {
     status?: Status;
@@ -16,39 +18,36 @@ interface Message {
     id?: string;
     type?: string;
 }
-interface Payload {
-    port: chrome.runtime.Port;
-    action: string;
-    message: Message;
-}
+const portToAbortController: Record<string, AbortController> = {};
 
-const sendToContentScript = (payload: Payload) => {
-    const { port, action, message } = payload
+const sendToContentScript = (port: chrome.runtime.Port, action: string, message: Message) => {
     port.postMessage({
         action,
         portName: port.name,
-        message: message,
-    })
+        message,
+    });
 }
-const systemPropmt = (type: string, nativeLang?: string) => {
-    let prompt  = `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation`;
-    if (type === 'chatgpt-explain') {
-        prompt = `You are an expert translator. Please explain the above text use the language with locale code is "${nativeLang}"`
-    } else if (type === 'chatgpt-summarize') {
-        prompt = `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible`
-    } else if (type === 'chatgpt-rewrite') {
-        prompt = `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence, ensuring it aligns with the expression of native speakers`
-    } else if (type === 'chatgpt-grammar') {
-        prompt = `You will be given statements. Your task is to correct them to standard grammar`
-    } else if (type === 'chatgpt-ask') {
-        prompt = `Please answer in the language with the locale code ${nativeLang}. You are a helpful assistant`
+
+const systemPrompt = (type: string, nativeLang?: string) => {
+    switch (type) {
+        case 'chatgpt-explain':
+            return `You are an expert translator. Please explain the above text use the language with locale code is "${nativeLang}"`;
+        case 'chatgpt-summarize':
+            return `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible. Please use the language with locale code is "${nativeLang}"`;
+        case 'chatgpt-rewrite':
+            return `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence, ensuring it aligns with the expression of native speakers. Please use the language with locale code is "${nativeLang}"`;
+        case 'chatgpt-grammar':
+            return `You will be given statements. Your task is to correct them to standard grammar`;
+        case 'chatgpt-ask':
+            return `You are a helpful assistant`;
+        default:
+            return `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation`;
     }
-    return prompt
 }
 
 const handleHistory = async (input: Input) =>  {
     const chatHistory = await getChatHistory(input.uuid)
-    const prompt = systemPropmt(input.type, input.nativeLang)
+    const prompt = systemPrompt(input.type, input.nativeLang)
 
     const message = [
         { role: 'system', content: prompt}
@@ -73,9 +72,9 @@ const handleHistory = async (input: Input) =>  {
     return message
 }
 
-const chatGPTResponse = async (port: chrome.runtime.Port, input: Input) => {
-    const { openaiKey, nativeLang, model } = await getDataFromStorage()
-    const prompt = systemPropmt(input.type, nativeLang)
+const chatGPTResponse = async (port: chrome.runtime.Port, input: Input, abortController: AbortController) => {
+    const { openaiKey, model } = await getDataFromStorage()
+    const prompt = systemPrompt(input.type, input.language)
     let message = [
         {
             role: 'system', 
@@ -89,8 +88,6 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: Input) => {
     if (input.type === 'chatgpt-ask') {
         message = await handleHistory(input)
     }
-
-    const abortController = new AbortController();
     const signal = abortController.signal;
 
     try {
@@ -108,27 +105,19 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: Input) => {
             signal: signal,
         });
         if (!response.body) {
-            sendToContentScript({
-                port,
-                action: 'chatGPTResponse',
-                message: {
-                    status: 'stream',
-                    token: 'ReadableStream not yet supported in this browser. Please update your browser',
-                    type: input.type || 'chatgpt-translate'
-                }
+            sendToContentScript(port, 'stream', {
+                status: 'stream',
+                token: 'ReadableStream not yet supported in this browser. Please update your browser',
+                type: input.type || 'chatgpt-translate'
             });
             return
         }
 
         if (response.status !== 200) {
-            sendToContentScript({
-                port,
-                action: 'chatGPTResponse',
-                message: {
-                    status: 'stream',
-                    token: 'Incorrect API key. Please update API key!',
-                    type: input.type || 'chatgpt-translate'
-                }
+            sendToContentScript(port, 'stream', {
+                status: 'stream',
+                token: 'Incorrect API key. Please update API key!',
+                type: input.type || 'chatgpt-translate'
             });
             return
         }
@@ -168,15 +157,11 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: Input) => {
                         // Update the UI with the new content
                         if (content) {
                             answer +=content
-                            sendToContentScript({
-                                port,
-                                action: 'chatGPTResponse',
-                                message: {
+                            sendToContentScript(port, 'stream', {
                                     status: 'stream',
                                     id: parsedLine.id,
                                     token: content,
-                                    type: input.type || 'chatgpt-translate',
-                                }
+                                    type: input.type || 'chatgpt-translate'
                             });
                         }
                     }
@@ -193,53 +178,48 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: Input) => {
             updateHistory(input.uuid, chat)
 
             // send status done to content script
-            sendToContentScript({
-                port,
-                action: 'chatGPTResponse',
-                message: {
+            sendToContentScript(port, 'stream', {
                     status: 'done',
                     id: id,
                     uuid: input.uuid,
                     chat: chat,
                     type: input.type || 'chatgpt-translate'
-                }
             });
         }
     } catch (error) {
 
-        if (error.name === 'AbortError') {
-            console.log('Fetch was aborted');
-            sendToContentScript({
-                port,
-                action: 'chatGPTResponse',
-                message: {
-                    status: 'stream',
-                    token: 'Fetch was aborted',
-                    type: input.type || 'chatgpt-translate'
-                }
-            });
-        } else {
-            sendToContentScript({
-                port,
-                action: 'chatGPTResponse',
-                message: {
-                    status: 'stream',
-                    token: error.message,
-                    type: input.type || 'chatgpt-translate'
-                }
-            });
-        }
+        const errorMessage = error.name === 'AbortError' ? 'Stopped generate' : error.message;
+        sendToContentScript(port, 'stream', {
+                status: 'stream',
+                token:errorMessage,
+                type: input.type || 'chatgpt-translate'
+        });
     } 
 
 }
 
 chrome.runtime.onConnect.addListener(port => {
     if (port.name.startsWith('content-script')) {
+        const abortController = new AbortController();
+        portToAbortController[port.sender.tab.id] = abortController;
+
         port.onMessage.addListener(async (message: Input) => {
-            await chatGPTResponse(port, message)
-        })
+            if (message.action === 'abort') {
+                const controller = portToAbortController[port.sender.tab.id];
+                if (controller) {
+                    controller.abort();
+                    delete portToAbortController[port.sender.tab.id];
+                }
+            } else {
+                await chatGPTResponse(port, message, abortController);
+            }
+        });
+
+        port.onDisconnect.addListener(() => {
+            delete portToAbortController[port.sender.tab.id];
+        });
     }
-})
+});
 
 chrome.contextMenus.create({
     id: 'chatgpt-wizard',

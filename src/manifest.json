@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "ChatGPT Wizard",
     "description": "Helping you understand language content with ChatGPT",
-    "version": "1.3",
+    "version": "1.4",
     "icons": {
         "16": "icons/icon-16.png",
         "32": "icons/icon-32.png",
@@ -39,7 +39,7 @@
     },
     "content_scripts": [{
         "js": ["content_scripts/index.js"],
-        "css": ["assets/index-6bc6fdaf.css"],
+        "css": ["assets/index-879e0a26.css"],
         "matches": ["<all_urls>"]
     }]
 }

@@ -106,6 +106,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             for (let i = 0; i < elements.length; i++) {
                 elements[i].classList.remove('hide');
             }
+
+            // save data
+            const id = generateID(32)
+            const openaiKey = await  encrypt(openai.value, id)
+            errorDiv.style.display = 'none'
+
+            // default value
+            chrome.storage.local.set({
+                openaiKey,
+                id,
+                model: model.value,
+                nativeLang: navigatorLanguageCode,
+                settingPopup: 'display_icon',
+                type: 'chatgpt-translate',
+            })
+
         }
     }
 
@@ -135,7 +151,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 type,
                 id,
                 model: model.value,
-               
             })
             window.close()
         }

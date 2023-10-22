@@ -58,19 +58,63 @@
     align-items: center;
     display: flex;
 }
+.chatgptIcon {
+  position: absolute; 
+  background: rgb(255, 255, 255); 
+  height: 30px; 
+  width: 60px; 
+  border-radius: 8px; 
+  box-shadow: rgba(0, 0, 0, 0.2) 0px 4px 8px 0px, rgba(0, 0, 0, 0.19) 0px 6px 20px 0px; 
+  z-index: 2147483647; 
+  display: flex; 
+  align-content: center; 
+  padding: 2px;
+}
+.chatgptPopup {
+  background-color: white; 
+  padding: 0px 10px 10px; 
+  z-index: 2147483647; 
+  color: black; 
+  border: solid transparent; 
+  border-radius: 8px; 
+  box-shadow: rgba(0, 0, 0, 0.2) 0px 4px 8px 0px, rgba(0, 0, 0, 0.19) 0px 6px 20px 0px; 
+  transition: left 0.1s ease 0s, top 0.1s ease 0s; 
+  padding: 0;
+}
 .popup {
     display: flex; 
     flex-direction: column; 
     justify-content: space-between;
-    padding: 0; 
+    padding: 0 8px; 
     word-wrap: break-word
 }
 .popupHead {
     border-bottom: 1px solid #eee; 
-    padding-top: 10px;
-    padding-bottom: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
     flex-grow: 0;
 }
+.popupLogo {
+  cursor: move; 
+  display: flex; 
+  align-items: center; 
+  width:calc(100% - 120px)
+}
+.popupLanguage {
+  margin: 0;
+  width: 120px;
+  height: 32px;
+  background: #fff;
+  color: #000;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  padding: 0 0 0 8px;
+  font-size: 14px;
+}
+.popupLanguage:focus-visible {
+  outline: none;
+}
+
 .popupFooter {
   display: flex;
   justify-content:center;
@@ -83,11 +127,13 @@
   bottom: 0;
   left: 0;
   width: 100%;
+  margin: 0;
+  padding: 8px;
 }
 .popupFooter p {
   font-size: 12px;
   color: darkgrey;
-  margin-bottom: 0;
+  margin: 0;
 }
 .popupTitle {
     margin-top: 0; 
@@ -105,14 +151,27 @@
     margin-top: 10px; 
     display: flex; 
     flex-direction: column;
+    position: relative;
 }
-
+.stopStream {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eee;
+  padding: 3px;
+  border-radius: 8px;
+  width: 65px;
+  font-size: 14px;
+  color: #000;
+  cursor: pointer;
+  margin-left: 8px;
+}
 .question {
     display: flex; 
     justify-content: end;
 }
 .questionDetail {
-    max-width: 90%; 
+    max-width: 84%; 
     font-size: 14px; 
     text-align:left; 
     background: #eee; 
@@ -124,7 +183,8 @@
 }
 .answer {
     display: flex; 
-    justify-content: start; 
+    align-items: start;
+    justify-content: space-between; 
     margin-top: 10px;
     margin-bottom: 10px;
     position: relative;
@@ -133,7 +193,8 @@
 
 .answerDetail {
     white-space: pre-wrap;
-    max-width: 90%; 
+    min-width: 50px;
+    max-width: 84%; 
     font-size: 14px; 
     text-align:left; 
     background: #eee; 
@@ -145,7 +206,7 @@
 .copy {
   display: none;
 }
-.answer:hover .copy {
+.answerDetail:hover .copy {
   display: flex;
   align-items: center;
   position: absolute;
