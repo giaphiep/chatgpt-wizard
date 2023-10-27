@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import { resolve } from 'path'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 const TRUE = 'true'
 
@@ -8,6 +9,7 @@ const outDir = resolve(__dirname, 'chatgpt-wizard')
 
 export default ({ mode, command }: { mode: string, command: string }) => {
     const ENV = loadEnv(mode, process.cwd()) // load (dev || prod) .env
+
     // vite config
     return defineConfig({
         resolve: {
@@ -40,8 +42,18 @@ export default ({ mode, command }: { mode: string, command: string }) => {
                         return `${chunk.name}/index.js`;
                     },
                 },
-                
             },
         },
+        // Add the copy plugin to copy the file during build
+        plugins: [
+            viteStaticCopy({
+              targets: [
+                {
+                  src: resolve(root, 'src/utils/tesseract.min.js'),
+                  dest: resolve(outDir, 'utils')
+                }               
+              ]
+            })
+          ]
     })
 }

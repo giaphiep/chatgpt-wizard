@@ -269,8 +269,7 @@
   padding: 0px;
 }
 .popupHeadAsk {
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding: 10px 8px;
   flex-grow: 0;
   border-bottom: 1px solid rgb(238, 238, 238);
   height: 50px;
@@ -356,4 +355,61 @@ textarea.questionInput:focus-visible {
   justify-content:center;
   align-items: center;
   cursor: pointer;
+}
+      
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2147483646;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.selection {
+  position: fixed;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.2);
+  z-index: 2147483646;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+}
+.loading{
+  width: 75px;
+  height: 75px;
+  margin: 0;
+  background: transparent;
+  border-top: 4px solid #12a37f;
+  border-right: 4px solid transparent;
+  border-radius: 50%;
+  -webkit-animation: 1s spin linear infinite;
+  animation: 1s spin linear infinite;
+}
+  
+@-webkit-keyframes spin {
+  from {
+      -webkit-transform: rotate(0deg);
+      transform: rotate(0deg);
+  }
+  to {
+      -webkit-transform: rotate(360deg);
+      transform: rotate(360deg);
+  }
+}
+        
+@keyframes spin {
+  from {
+      -webkit-transform: rotate(0deg);
+      transform: rotate(0deg);
+  }
+  to {
+      -webkit-transform: rotate(360deg);
+      transform: rotate(360deg);
+  }
 }

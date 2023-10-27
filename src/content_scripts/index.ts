@@ -1,9 +1,17 @@
 
+declare var Tesseract: any;
+
 import classes from './index.module.css';
 
 type QA = { question: string, answer: string };
 type Status = 'stream' | 'done' | 'error'
 
+interface Coordinates {
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+}
 interface Message {
     status?: Status;
     token?: string;
@@ -17,6 +25,8 @@ let iconDiv: HTMLElement = null
 let popupDiv: HTMLElement = null
 let port = null as chrome.runtime.Port
 let currentPortName = null as string
+let selecting = false;
+let startX: number, startY: number, endX: number, endY: number;
 
 const iso6391Codes = [
     { code: 'af', name: 'Afrikaans' },
@@ -126,6 +136,7 @@ const iso6391Codes = [
     { code: 'yo', name: 'Yoruba' },
     { code: 'zu', name: 'Zulu' },
 ]
+
 const iconID = 'gh-chatgpt-wizard-icon'
 const defaultID = 'gh-chatgpt-wizard-default'
 const menuID = 'gh-chatgpt-wizard-menu'
@@ -148,9 +159,10 @@ const iconCloseID = 'gh-chatgpt-wizard-icon-close'
 const btnSendID = 'gh-chatgpt-wizard-send'
 const askHeadID = 'gh-chatgpt-wizard-ask-head'
 const stopStreamID = 'gh-chatgpt-wizard-stop-stream'
+const overlayID = 'gh-chatgpt-wizard-overlay'
+const selectionID = 'gh-chatgpt-wizard-selection'
 const contentWidth = 500
 const contentAskWidth = 500
-
 
 const iconStop = chrome.runtime.getURL('icons/stop.svg')
 const icon64URL = chrome.runtime.getURL('icons/icon-64.png')
@@ -485,6 +497,28 @@ const htmlAskPopup = (text: string) => {
             </div>`
 }
 
+const htmlQuizSlover = (type: string, nativeLang: string) => {
+    return `<div class="${classes.popup}" style="height: 100%;">
+            <div id="${popupHeadID}" class="${classes.popupHead}">
+                <div style="display: flex;align-items: center; justify-content: space-between;">
+                    <div class="${classes.popupLogo}" style="cursor: default;">
+                        <image style="width: 32px; height: 32px; margin: 0; filter: none;" src="${icon64URL}" alt="Quiz Slover" />
+                        <p class="${classes.popupTitle}">Quiz Slover</p>
+                    </div>
+                    ${htmlLanguage('', type, nativeLang)}
+                </div>
+            </div>
+            <div id="${boxChatID}" class="${classes.boxChat}" style="flex-grow: 1; overflow-y: auto;">
+                <div style="display: flex;justify-content:center; align-item:center; margin-top: 60px;">
+                    <div class="${classes.loading}"></div>
+                </div>
+            </div>
+            <div class="${classes.popupFooter}"> 
+                Powered by ChatGPT Wizard
+            </div>
+        </div>`
+}
+
 const getPopupPosition = (selectedTextRect: DOMRect) => {
     const viewportWidth = window.innerWidth;
     // Calculate the available space to the left and right of the selected text
@@ -505,6 +539,7 @@ const getPopupPosition = (selectedTextRect: DOMRect) => {
         left: left,
     }
 }
+
 const updateHeight = () => {
     const inputEl = document.getElementById(textareaID) as HTMLTextAreaElement;
     const boxChat = document.getElementById(boxChatID) as HTMLElement;
@@ -571,10 +606,16 @@ const handleSendChat = () => {
     chatGPT(question, 'chatgpt-ask')
 }
 
-const initPopup = async (text: string, selectedTextRect: DOMRect, type = 'chatgpt-translate') => {
-    const {nativeLang} = await getDataFromStorage()
+const initPopup = async (type: string, data: {
+    text?: string,
+    selectedTextRect?: DOMRect,
+    coords?: Coordinates
+}) => {
+    const {text, selectedTextRect} = data
 
-    const position = getPopupPosition(selectedTextRect)
+    const {nativeLang} = await getDataFromStorage()
+    
+    let position = getPopupPosition(selectedTextRect)
 
     // Create the popupDiv and set its styles
     popupDiv = document.createElement('div');
@@ -582,14 +623,15 @@ const initPopup = async (text: string, selectedTextRect: DOMRect, type = 'chatgp
     popupDiv.className = classes.chatgptPopup;
     popupDiv.id = popupID;
     if (type === 'chatgpt-ask') {
-        popupDiv.style.position = 'fixed';
+        popupDiv.style.position = 'fixed'
         popupDiv.style.top = '0'
+        popupDiv.style.bottom = 'auto'
         popupDiv.style.right = '0'
         popupDiv.style.height = '100%'
         popupDiv.style.borderTopRightRadius = '0'
         popupDiv.style.borderBottomRightRadius = '0'
-        popupDiv.style.width = `${contentAskWidth}px`;
-        popupDiv.innerHTML = htmlAskPopup(text);
+        popupDiv.style.width = `${contentAskWidth}px`
+        popupDiv.innerHTML = htmlAskPopup(text)
 
         // event handle Input
         setTimeout(() => {
@@ -661,7 +703,7 @@ const initPopup = async (text: string, selectedTextRect: DOMRect, type = 'chatgp
             }  
         }, 5);
                    
-    } else {
+    } else  {
         popupDiv.style.position = 'absolute';
         popupDiv.draggable = false;
         popupDiv.style.left = `${position.left}px`;
@@ -701,14 +743,9 @@ const initPopup = async (text: string, selectedTextRect: DOMRect, type = 'chatgp
         }
         popupHead.addEventListener('mousedown', (e) => {
             const element = e.target as Element
-
-            // TODO allow only header can move
             if ((element).matches('select, select *')) {
-                // If the target is the select dropdown or any of its descendants,
-                // don't prevent default and don't make the element popup.
                 return;
             }
-
             e.preventDefault();
             isDragging = true;
             offsetX = e.clientX - popup.getBoundingClientRect().left;
@@ -720,35 +757,259 @@ const initPopup = async (text: string, selectedTextRect: DOMRect, type = 'chatgp
 
      // event onChange language
     if (type !== 'chatgpt-ask' && type !== 'chatgpt-grammar') {
-         const langEl = document.getElementById(languageID)
-         if (langEl) {
-             langEl.addEventListener('change', (event: Event) => {
-                 // stop steam if avaiable
-                 if (port !== null) {
-                     const action  = 'abort'
-                     port.postMessage({action})
-                     port = null
-                 }
-                 // generate again
-                 setTimeout(() => {
-                     const element = event.target as HTMLSelectElement
-                     document.querySelector(`#${boxChatID} > .${boxAnswerClass}:last-child`)?.remove()
-                     const boxChat = document.getElementById(boxChatID)
-                     boxChat.innerHTML += htmlAnswerItem()
- 
-                     const language = element.value;
-                     const selectionText = element.getAttribute('q')
-                     const type = document.getElementById(popupID).getAttribute('type')
-                     chatGPT(selectionText, type, language)
-                 }, 100)
-                 
-             })
-         }
+        const langEl = document.getElementById(languageID)
+        if (langEl) {
+            langEl.addEventListener('change', (event: Event) => {
+                // stop steam if avaiable
+                if (port !== null) {
+                    const action  = 'abort'
+                    port.postMessage({action})
+                    port = null
+                }
+                // generate again
+                setTimeout(() => {
+                    const element = event.target as HTMLSelectElement
+                    document.querySelector(`#${boxChatID} > .${boxAnswerClass}:last-child`)?.remove()
+                    const boxChat = document.getElementById(boxChatID)
+                    boxChat.innerHTML += htmlAnswerItem()
+
+                    const language = element.value;
+                    const selectionText = element.getAttribute('q')
+                    const type = document.getElementById(popupID).getAttribute('type')
+                    chatGPT(selectionText, type, language)
+                }, 100)
+                
+            })
+        }
     }
 }
 
-document.addEventListener('mouseup', async () => {
+const initPopupQuiz = async () => {
+    const {nativeLang} = await getDataFromStorage()
+    popupDiv = document.createElement('div');
+    popupDiv.className = classes.chatgptPopup;
+    popupDiv.id = popupID;
+    popupDiv.style.display = 'none';
+    popupDiv.style.position = 'fixed';
+    popupDiv.style.top = 'auto'
+    popupDiv.style.bottom = '0'
+    popupDiv.style.right = '0'
+    popupDiv.style.height = '500px'
+    popupDiv.style.borderBottomLeftRadius = '0'
+    popupDiv.style.width = `${contentAskWidth}px`
+    popupDiv.innerHTML = htmlQuizSlover('chatgpt-quiz-slover', nativeLang)
+    
+    document.body.appendChild(popupDiv);
+    // set type poupup
+    document.getElementById(popupID).setAttribute('type', 'chatgpt-quiz-slover')
+    // set uuid poupup
+    const uuid = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+    document.getElementById(popupID).setAttribute('uuid', uuid)
 
+    const langEl = document.getElementById(languageID)
+    if (langEl) {
+        langEl.addEventListener('change', (event: Event) => {
+            event.stopPropagation()
+            // stop steam if avaiable
+            if (port !== null) {
+                const action  = 'abort'
+                port.postMessage({action})
+                port = null
+            }
+            // generate again
+            setTimeout(() => {
+                const element = event.target as HTMLSelectElement
+                document.querySelector(`#${boxChatID} > .${boxAnswerClass}:last-child`)?.remove()
+                const boxChat = document.getElementById(boxChatID)
+                boxChat.innerHTML += htmlAnswerItem()
+
+                const language = element.value;
+                const selectionText = element.getAttribute('q')
+                const type = document.getElementById(popupID).getAttribute('type')
+                chatGPT(selectionText, type, language)
+            }, 100)
+            
+        })
+    }
+}
+
+const capture = (startX: number, startY: number, endX: number, endY: number) => {
+    const popup = document.getElementById(popupID)
+    if (!popup) return
+    const uuid = popup.getAttribute('uuid')
+    currentPortName = `content-script-${uuid}`
+    
+    port = chrome.runtime.connect({
+        name: currentPortName,
+    })
+    // send to background
+    const action = 'capture'
+    port.postMessage({action})
+
+    port.onMessage.addListener((data: any) => {
+        if (data.action === 'capture' && data.portName === currentPortName) {
+
+            // show popup
+            document.getElementById(popupID).style.display = 'block'
+
+            const {dataUrl} = data.message
+
+            let img = new Image();
+            img.onload = async () => {
+                let zoomFactor = window.devicePixelRatio;
+
+                let adjustedCoords = {
+                    startX: startX * zoomFactor,
+                    startY: startY * zoomFactor,
+                    endX: endX * zoomFactor,
+                    endY: endY * zoomFactor
+                };
+
+                let width = adjustedCoords.endX - adjustedCoords.startX;
+                let height = adjustedCoords.endY - adjustedCoords.startY;
+
+                let canvas = document.createElement('canvas');
+                let ctx = canvas.getContext('2d');
+
+                canvas.width = width;
+                canvas.height = height;
+
+                ctx.drawImage(img, adjustedCoords.startX, adjustedCoords.startY, width, height, 0, 0, width, height);
+                
+                let imagebas64 = canvas.toDataURL('image/png');
+            
+                // apend image
+                const boxChatEl = document.getElementById(boxChatID)
+                boxChatEl.innerHTML = `<div style="display: flex; justify-content: end;">
+                                            <div style="max-height: 250px; max-width: 84%;">
+                                            <img style="height: 100%; max-width: 100%; border-radius: 8px;" src="${imagebas64}" />
+                                            </div>
+                                        </div>
+                                        ${htmlAnswerItem()}`
+                // Content Security Policy (CSP) some pages. Need use server
+
+                const srcTesseract = chrome.runtime.getURL('utils/tesseract.min.js')
+               
+                import(srcTesseract).then(async () => {
+                    try {
+                        const worker = await Tesseract.createWorker();
+                        var { data: { text } } = await worker.recognize(imagebas64);
+                        await worker.terminate();
+
+                        if (text.length === 0) {
+                            removeIconAndPopup()
+                            return
+                        }
+
+                        document.getElementById(languageID).setAttribute('q', text)
+                        const {nativeLang} = await getDataFromStorage()
+                        chatGPT(text, 'chatgpt-quiz-slover', nativeLang)
+
+                    } catch (error: any) {
+                        alert(error)
+                        console.error("Error in Tesseract OCR:", error);
+                        removeIconAndPopup()
+                    }
+                })
+                
+            };
+            
+            img.onerror = () => {
+                console.error("Error loading image.");
+            };
+            img.src = dataUrl;
+        }
+        if (data.action === 'image' && data.portName === currentPortName) {
+            const {q} = data.message
+            alert(q)
+        }
+    });
+}
+
+const preCapture = () => {
+    document.body.style.cursor = 'cell';
+    document.body.style.userSelect = 'none';
+    document.body.style.overflow = 'hidden';
+
+    let overlay = document.createElement('div');
+    let selection = document.createElement('div');
+
+    overlay.id = overlayID;
+    overlay.className = classes.overlay;
+
+    selection.id = selectionID;
+    selection.className = classes.selection;
+
+    const onMouseDown = (e: MouseEvent) => {
+        selecting = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        document.body.appendChild(selection);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+        if (!selecting) return;
+        endX = e.clientX;
+        endY = e.clientY;
+
+        const left = Math.min(startX, endX);
+        const top = Math.min(startY, endY);
+        const width = Math.abs(endX - startX);
+        const height = Math.abs(endY - startY);
+
+        selection.style.left = `${left}px`;
+        selection.style.top = `${top}px`;
+        selection.style.width = `${width}px`;
+        selection.style.height = `${height}px`;
+    };
+
+    const onMouseUp = async (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const w = selection.clientWidth 
+        const h = selection.clientHeight 
+
+        selecting = false;
+        overlay.remove();
+        selection.remove();
+
+        document.body.style.cursor = 'initial';
+        document.body.style.userSelect = 'auto';
+        document.body.style.overflow = '';
+
+        if (w > 20 || h > 20) {
+            await initPopupQuiz();
+            capture(startX, startY, endX, endY);
+        }
+
+        startX = null
+        startY = null
+        endX = null
+        endY = null
+
+        // Cleanup
+        overlay.removeEventListener('mousedown', onMouseDown);
+        overlay.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        overlay.removeEventListener('mouseleave', onMouseLeave);
+    };
+
+    const onMouseLeave = (e: MouseEvent) => {
+        if (selecting) {
+            onMouseUp(e);
+        }
+    };
+
+    overlay.addEventListener('mousedown', onMouseDown);
+    overlay.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);  // Listen on the document
+    overlay.addEventListener('mouseleave', onMouseLeave);
+
+    document.body.appendChild(overlay);
+};
+
+
+document.addEventListener('mouseup', async () => {
     const {openaiKey, settingPopup, nativeLang, type} = await getDataFromStorage()
     if (!openaiKey) return
 
@@ -775,13 +1036,13 @@ document.addEventListener('mouseup', async () => {
         if (settingPopup === 'display_icon') {
             iconDiv = document.createElement('div')
             iconDiv.className = classes.chatgptIcon
-           
+        
             // Calculate the position for the icon button, considering page scroll
             const position = getPosition(selection.getRangeAt(0))
             const iconWidth = 60 // Width of the icon
             const left = position.left + window.scrollX + position.width / 2 - iconWidth / 2;
 
-             // Add a small gap between the selection and the icon
+            // Add a small gap between the selection and the icon
             const spacing = 5;
             let top = position.bottom + spacing;
 
@@ -789,14 +1050,17 @@ document.addEventListener('mouseup', async () => {
             iconDiv.style.top = `${top}px`
             iconDiv.id = iconID
             iconDiv.innerHTML = iconHtml()
-   
+
             // append to body
             document.body.appendChild(iconDiv)
             
             const defaultElement = document.getElementById(defaultID);
             if (defaultElement) {
                 defaultElement.onclick = async () => {
-                    await initPopup(selectionText, selectionRect, type)
+                    await initPopup(type, {
+                        text: selectionText, 
+                        selectedTextRect:selectionRect
+                    })
                     chatGPT(selectionText, type, nativeLang)
                     removeIcon()
                 }
@@ -804,7 +1068,7 @@ document.addEventListener('mouseup', async () => {
 
             const menuElement = document.getElementById(menuID);
             if (menuElement) {
-                menuElement.onclick = async (event: any) => {
+                menuElement.onclick = async (event: Event) => {
                     event.stopPropagation();
                     const subMenu = document.getElementById(subMenuID)
                     if (subMenu) {
@@ -818,7 +1082,10 @@ document.addEventListener('mouseup', async () => {
                             if (translateEl) {
                                 translateEl.onclick = async () => {
                                     removeIcon()
-                                    await initPopup(selectionText, selectionRect, 'chatgpt-translate')
+                                    await initPopup('chatgpt-translate',{
+                                        text: selectionText, 
+                                        selectedTextRect:selectionRect
+                                    })
                                     chatGPT(selectionText, 'chatgpt-translate', nativeLang)
                                 }
                             }
@@ -826,7 +1093,10 @@ document.addEventListener('mouseup', async () => {
                             if (explainEl) {
                                 explainEl.onclick = async () => {
                                     removeIcon()
-                                    await initPopup(selectionText, selectionRect, 'chatgpt-explain')
+                                    await initPopup('chatgpt-explain', {
+                                        text: selectionText, 
+                                        selectedTextRect:selectionRect
+                                    })
                                     chatGPT(selectionText, 'chatgpt-explain', nativeLang)
                                 }
                             }
@@ -834,7 +1104,10 @@ document.addEventListener('mouseup', async () => {
                             if (summarizeEl) {
                                 summarizeEl.onclick = async () => {
                                     removeIcon()
-                                    await initPopup(selectionText, selectionRect, 'chatgpt-summarize')
+                                    await initPopup('chatgpt-summarize', {
+                                        text: selectionText, 
+                                        selectedTextRect:selectionRect
+                                    })
                                     chatGPT(selectionText, 'chatgpt-summarize', nativeLang)
                                 }
                             }
@@ -842,7 +1115,10 @@ document.addEventListener('mouseup', async () => {
                             if (rewriteEl) {
                                 rewriteEl.onclick = async () => {
                                     removeIcon()
-                                    await initPopup(selectionText, selectionRect, 'chatgpt-rewrite')
+                                    await initPopup('chatgpt-rewrite', {
+                                        text: selectionText, 
+                                        selectedTextRect:selectionRect
+                                    })
                                     chatGPT(selectionText, 'chatgpt-rewrite', nativeLang)
                                 }
                             }
@@ -850,7 +1126,10 @@ document.addEventListener('mouseup', async () => {
                             if (grammarEl) {
                                 grammarEl.onclick = async () => {
                                     removeIcon()
-                                    await initPopup(selectionText, selectionRect, 'chatgpt-grammar')
+                                    await initPopup('chatgpt-grammar', {
+                                        text: selectionText, 
+                                        selectedTextRect:selectionRect
+                                    })
                                     chatGPT(selectionText, 'chatgpt-grammar', nativeLang)
                                 }
                             }
@@ -859,7 +1138,10 @@ document.addEventListener('mouseup', async () => {
                             if (askEl) {
                                 askEl.onclick = async () => {
                                     removeIcon()
-                                    await initPopup(selectionText, selectionRect, 'chatgpt-ask')
+                                    await initPopup('chatgpt-ask', {
+                                        text: selectionText, 
+                                        selectedTextRect:selectionRect
+                                    })
                                 }
                             }
 
@@ -867,15 +1149,19 @@ document.addEventListener('mouseup', async () => {
                     }
                 }
             }
-           
+        
         } else {
-            await initPopup(selectionText, selectionRect, type)
+            await initPopup(type, {
+                text: selectionText, 
+                selectedTextRect:selectionRect
+            })
             chatGPT(selectionText, type, nativeLang)
         }     
     }
 })
 
 document.addEventListener('click', async (evt: MouseEvent) => {
+
     const clickedElement = evt.target as HTMLElement;
     const { id } = clickedElement
     if (id === popupID || id === defaultID) {
@@ -884,7 +1170,7 @@ document.addEventListener('click', async (evt: MouseEvent) => {
     else {
         const popup = document.getElementById(popupID)
         if (popup) {
-
+            const type = popup.getAttribute('type')
             // handle stop stream
             const stopStreamEl  = findDiv(clickedElement, stopStreamID)
             if (stopStreamEl) {
@@ -902,7 +1188,7 @@ document.addEventListener('click', async (evt: MouseEvent) => {
             }
 
             // check type popup
-            const type = popup.getAttribute('type')
+            
             if (type !== 'chatgpt-ask') {
                 if (!clickedElement.closest(`#${popupID}`)) {
                     removeIconAndPopup()  
@@ -922,26 +1208,36 @@ document.addEventListener('click', async (evt: MouseEvent) => {
             } else {
                 removeIcon()
             }
+            
         }
     }
 })
-
 // contextMenu
 chrome.runtime.onMessage.addListener(async (data: any) => {
     const popup = document.getElementById(popupID) as HTMLElement
     if (popup) return
     removeIconAndPopup()
-    const selection = document.getSelection();
-    await initPopup(selection.toString(), selection.getRangeAt(0).getBoundingClientRect(), data.type)
-    
-    if (data.type !== 'chatgpt-ask') {
-        chatGPT(selection.toString(), data.type)
+    // selection
+    if (data.type === 'chatgpt-quiz-solver') {
+        preCapture()
+    } else {
+        const selection = document.getSelection();
+        await initPopup(data.type, {
+            text: selection.toString(), 
+            selectedTextRect:selection.getRangeAt(0).getBoundingClientRect()
+        })
+        if (data.type !== 'chatgpt-ask' && data.type !== 'chatgpt-quiz-solver') {
+            chatGPT(selection.toString(), data.type)
+        }
     }
 })
 
 // Right click
 document.addEventListener('contextmenu', () => {
     removeIcon()
+    document.getElementById(overlayID)?.remove()
+    document.getElementById(selectionID)?.remove()
+
     // const popup = document.getElementById(popupID) as HTMLElement
     // if (popup) {
     //     const type = popup.getAttribute('type')

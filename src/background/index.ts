@@ -9,6 +9,8 @@ interface Input {
     type?: string;
     action: string;
     language?: string;
+    image?: string;
+
 }
 interface Message {
     status?: Status;
@@ -17,6 +19,9 @@ interface Message {
     uuid?: string;
     id?: string;
     type?: string;
+    dataUrl?: string;
+    q?: string; 
+    
 }
 const portToAbortController: Record<string, AbortController> = {};
 
@@ -40,6 +45,8 @@ const systemPrompt = (type: string, nativeLang?: string) => {
             return `You will be given statements. Your task is to correct them to standard grammar`;
         case 'chatgpt-ask':
             return `You are a helpful assistant`;
+        case 'chatgpt-quiz-slover':
+                return `You will be given one or more quizzes. Your task is to identify the correct answers then explain them in detail after the correct answers. Please use the language with locale code is "${nativeLang}" `;
         default:
             return `You will be provided with words or sentences, and your task is to translate it into the language with locale code is "${nativeLang}" without explanation`;
     }
@@ -211,7 +218,20 @@ chrome.runtime.onConnect.addListener(port => {
                     delete portToAbortController[port.sender.tab.id];
                 }
             } else {
-                await chatGPTResponse(port, message, abortController);
+                if (message.action === 'stream') {
+                    await chatGPTResponse(port, message, abortController);
+                } else if (message.action === 'capture') {
+                    chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
+                        if (chrome.runtime.lastError) {
+                            console.error(chrome.runtime.lastError);
+                            return;
+                        }
+                        // send image base64 to content script
+                        sendToContentScript(port, 'capture', {dataUrl: dataUrl});
+                    });
+                }  else {
+                    // TODO
+                }
             }
         });
 
@@ -221,15 +241,22 @@ chrome.runtime.onConnect.addListener(port => {
     }
 });
 
+  
 chrome.contextMenus.create({
     id: 'chatgpt-wizard',
     title: 'ChatGPT Wizard',
-    contexts: ['selection'],
+    contexts: ['all'],
 }, () => {
     if (chrome.runtime.lastError) {
         console.log('Context menu item already exists');
     } else {
-        console.log('Context menu item created successfully');
+
+        chrome.contextMenus.create({
+            id: 'chatgpt-quiz-solver',
+            parentId: 'chatgpt-wizard',
+            title: 'Quiz Solver (Ctrl+Shift+S)',
+            contexts: ['all'],
+        });
 
         chrome.contextMenus.create({
             id: 'chatgpt-translate',
@@ -270,6 +297,7 @@ chrome.contextMenus.create({
             title: 'Ask ChatGPT',
             contexts: ['selection'],
         });
+       
     }
 });
 
@@ -310,6 +338,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
                 })
             })
             break;
+        case 'chatgpt-quiz-solver':
+                chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+                    chrome.tabs.sendMessage(tabs[0].id, {
+                        type: 'chatgpt-quiz-solver',
+                    })
+                })
+                break;
         default:
             chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
                 chrome.tabs.sendMessage(tabs[0].id, {
@@ -321,3 +356,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
     
 })
+
+chrome.commands.onCommand.addListener((command) => {
+    switch(command) {
+        case 'quiz_solver':
+            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    type: 'chatgpt-quiz-solver',
+                })
+            })
+            break;
+    }
+});
