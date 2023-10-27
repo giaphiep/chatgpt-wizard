@@ -1,25 +1,32 @@
 # ChatGPT Wizard
 
-Download link: https://chrome.google.com/webstore/detail/chatgpt-wizard/gflglaphohkgcoelkkhooamdckljhjne?hl=en&authuser=0
+Demo Video: https://www.youtube.com/watch?v=QB5P8hR_cH8
 
 This Chrome extension, developed using manifest version 3, integrates the functionalities of ChatGPT for various tasks such as translation, explanation, summarization, rewriting, grammar correction, and ask ChatGPT regarding highlighted text.
 
 Select an unknown sentence, and let ChatGPT Wizard help you.
 
 ![Screenshot1](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/1.gif)
-![Screenshot2](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/2.png)
-![Screenshot3](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/3.png)
-![Screenshot4](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/4.png)
-
-Demo Video: https://www.youtube.com/watch?v=gJEhSeR-YTw
+![Screenshot2](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/2.gif)
 
 ## Install
 
 1. Run
 
+In Terminal 1
+
 ```
+cd extension
 bun install
 bun run build
+```
+
+Optional: If you want to use your own server, you need to add the server URL to the "host_permissions" parameter in the file located at extension/src/manifest.json and then rebuild it. After this, open Terminal 2.
+
+```
+cd server
+bun install
+bun run start
 ```
 
 These commands will generate a folder named "chatgpt-wizard" after the build process is complete
@@ -48,6 +55,4 @@ If you find the extension useful and would like to support its development, plea
 
 MIT
 
-```
-
-```
+[TODO]

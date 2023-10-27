@@ -10,12 +10,22 @@ bun.lockb
 yarn.lock
 
 node_modules
-chatgpt-wizard
-chatgpt-wizard.zip
-.env
-yarn.lock
-package-lock.json
-bun.lockb
+extension/node_modules
+extension/chatgpt-wizard
+extension/chatgpt-wizard-*.zip
+extension/.env
+extension/yarn.lock
+extension/package-lock.json
+extension/bun.lockb
+
+
+server/node_modules
+server/uploads
+server/bun.lockb
+server/yarn.lock
+server/package-lock.lock
+server/*.traineddata
+server/.env
 
 # Editor directories and files
 .vscode/*
