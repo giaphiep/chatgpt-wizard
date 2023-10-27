@@ -7,9 +7,7 @@ This Chrome extension, developed using manifest version 3, integrates the functi
 Select an unknown sentence, and let ChatGPT Wizard help you.
 
 ![Screenshot1](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/1.gif)
-![Screenshot2](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/2.png)
-![Screenshot3](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/3.png)
-![Screenshot4](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/4.png)
+![Screenshot2](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/2.gif)
 
 Demo Video: https://www.youtube.com/watch?v=gJEhSeR-YTw
 
