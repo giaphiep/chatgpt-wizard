@@ -2,12 +2,13 @@
 
 Demo Video: https://www.youtube.com/watch?v=QB5P8hR_cH8
 
-This Chrome extension, developed using manifest version 3, integrates the functionalities of ChatGPT for various tasks such as translation, explanation, summarization, rewriting, grammar correction, and ask ChatGPT regarding highlighted text.
+This Chrome extension, developed using manifest version 3, integrates the functionalities of ChatGPT for various tasks such as translation, explanation, summarization, rewriting, grammar correction, read highlighted text, and ask ChatGPT regarding highlighted text
 
 Select an unknown sentence, and let ChatGPT Wizard help you.
 
 ![Screenshot1](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/1.gif)
 ![Screenshot2](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/2.gif)
+![Screenshot3](https://github.com/giaphiep/chatgpt-wizard/blob/main/screenshots/3.gif)
 
 ## Install
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChatGPT Wizard",
   "description": "Boost your browser with ChatGPT Wizard: instantly solve quizzes, ask ChatGPT, and more.",
-  "version": "1.7",
+  "version": "1.76",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -12,7 +12,7 @@
   },
   "permissions": ["storage", "contextMenus", "activeTab"],
   "host_permissions": [
-    "https://api.openai.com/v1/chat/completions",
+    "https://api.openai.com/*",
     "https://chatgptwizard.click/*"
   ],
   "action": {
@@ -46,7 +46,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content_scripts/index.js"],
-      "css": ["assets/index-92b3ed4a.css"]
+      "css": ["assets/index-65332caf.css"]
     }
   ],
 

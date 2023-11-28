@@ -1,9 +1,18 @@
 import { getDataFromStorage, getChatHistory, updateHistory } from '../utils'
-type Status = 'stream' | 'done' | 'stop'
-type QA = { 
-    question: string, 
-    answer: string 
+type Status = 'stream' | 'done' | 'stop' | 'read';
+type Q = string | Array<{
+        type: string;
+        text?: string;
+        image_url?: any
+      }>
+type QA = {
+  question: Q;
+  answer: string;
 };
+interface HistoryChat {
+  role: string;
+  content: Q;
+}
 interface PromptMap {
     [key: string]: string;
 }
@@ -17,18 +26,19 @@ interface Input {
     image?: string;
     tone?: string;
     activeElement?: HTMLElement;
-
+    src?: string;
 }
 
 interface Message {
-    status?: Status;
-    token?: string;
-    chat?: QA,
-    uuid?: string;
-    id?: string;
-    type?: string;
-    dataUrl?: string;
-    q?: string; 
+  status?: Status;
+  token?: string;
+  chat?: QA;
+  uuid?: string;
+  id?: string;
+  type?: string;
+  dataUrl?: string;
+  q?: string;
+  base64Chunk?: string;
 }
 
 const portToAbortController: Record<string, AbortController> = {};
@@ -39,13 +49,19 @@ const portToAbortController: Record<string, AbortController> = {};
  * @param action - The action to perform.
  * @param message - The message to send.
  */
-const sendToContentScript = (port: chrome.runtime.Port, action: string, message: Message) => {
-    port.postMessage({
-        action,
-        portName: port.name,
-        message,
-    });
-}
+const sendToContentScript = (
+  port: chrome.runtime.Port,
+  action: string,
+  message: Message,
+  base64Chunk?: string
+) => {
+  port.postMessage({
+    action,
+    portName: port.name,
+    message,
+    base64Chunk,
+  });
+};
 
 /**
  * Returns a system prompt based on the type of the input.
@@ -53,16 +69,21 @@ const sendToContentScript = (port: chrome.runtime.Port, action: string, message:
  * @param nativeLang - The native language of the user.
  * @returns The system prompt.
  */
-function systemPrompt(type: string, nativeLang?: string, tone?: string): string {
+const systemPrompt = (type: string, nativeLang?: string, tone?: string) => {
     const prompts: PromptMap = {
-        'chatgpt-explain': `You are an expert translator. Please explain the above text in ${nativeLang}`,
-        'chatgpt-summarize': `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible. Please summarize the text in ${nativeLang}`,
-        'chatgpt-rewrite': `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence in ${nativeLang}`,
-        'chatgpt-grammar': `You will be given statements. Your task is to correct them to standard grammar`,
-        'chatgpt-ask': `You are a helpful assistant`,
-        'chatgpt-prompt': `You are a helpful assistant. ${tone ? ` Please use tone: ${tone} and language in "${nativeLang}"`: `Please use language in "${nativeLang}"`}`,
-        'chatgpt-quiz-slover': `You will be given one or more quizzes. Your task is to identify the correct answers then explain them in detail after the correct answers. Please use the language in "${nativeLang}"`,
-        default: `Please translate the following words or sentences into ${nativeLang}`,
+      'chatgpt-explain': `You are an expert translator. Your task is explain the above text in the language whose ISO 639 code is ${nativeLang}`,
+      'chatgpt-summarize': `You are a professional text summarizer, you can only summarize the text, don't interpret it, make it shorter as possible. Please summarize the text in the language whose ISO 639 code is ${nativeLang}`,
+      'chatgpt-rewrite': `You are a language expert, Please enhance the text to improve its clarity, conciseness, and coherence in the language whose ISO 639 code is ${nativeLang}`,
+      'chatgpt-grammar': `You will be given statements. Your task is to correct them to standard grammar`,
+      'chatgpt-ask': `You are a helpful assistant`,
+      'chatgpt-vision': `You are a helpful assistant`,
+      'chatgpt-prompt': `You are a helpful assistant. ${
+        tone
+          ? `Please use the ${tone} tone and the language with the ISO 639 code ${nativeLang}.`
+          : `Please use the language with the ISO 639 code ${nativeLang}.`
+      }`,
+      'chatgpt-quiz-slover': `You will be given one or more quizzes. Your task is to identify the correct answers then explain them in detail after the correct answers. Please use the language in "${nativeLang}"`,
+      default: `You will be provided with words or sentences. Your task is only to translate these words or sentences into the language whose ISO 639 code is ${nativeLang}`,
     };
 
     return prompts[type] || prompts.default;
@@ -75,11 +96,11 @@ function systemPrompt(type: string, nativeLang?: string, tone?: string): string 
  */
 const handleHistory = async (input: Input) =>  {
     const chatHistory = await getChatHistory(input.uuid)
-    const prompt = systemPrompt(input.type, input.nativeLang)
 
-    const message = [
-        { role: 'system', content: prompt}
-    ]
+    const message = []
+    const prompt = systemPrompt(input.type, input.nativeLang);
+    message.push({ role: 'system', content: prompt });
+
     // old history
     if (chatHistory.length > 0) {
         for(let value of chatHistory) {
@@ -92,7 +113,28 @@ const handleHistory = async (input: Input) =>  {
                 content: value.answer
             })
         }
+    } else {
+        if (input.type === 'chatgpt-vision') {
+            message.push({
+                role: 'user',
+                content: [
+                {
+                    type: 'text',
+                    text: input.text,
+                },
+                {
+                    type: 'image_url',
+                    image_url: {
+                    url: input.src,
+                    },
+                },
+                ],
+            });
+            return message;
+        }
     }
+
+    // add new message
     message.push({
         role: 'user',
         content: input.text
@@ -110,35 +152,45 @@ const handleHistory = async (input: Input) =>  {
 const chatGPTResponse = async (port: chrome.runtime.Port, input: Input, abortController: AbortController) => {
     const { openaiKey, model } = await getDataFromStorage()
     const prompt = systemPrompt(input.type, input.language, input?.tone)
-    let message = [
-        {
-            role: 'system', 
-                content: prompt
-        },
-        {
-            role: 'user', 
-            content: input.text.trim()
-        },
-    ]
-    if (input.type === 'chatgpt-ask') {
+    let message: HistoryChat[] = [
+      {
+        role: 'system',
+        content: prompt,
+      },
+      {
+        role: 'user',
+        content: input.text.trim(),
+      },
+    ];
+
+    let useModel = model || 'gpt-3.5-turbo-1106';
+    if (input.type === 'chatgpt-vision') {
+        useModel = 'gpt-4-vision-preview';
+    }
+
+    if (input.type === 'chatgpt-ask' || input.type === 'chatgpt-vision') {
         message = await handleHistory(input)
     }
     const signal = abortController.signal;
 
     try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        const response = await fetch(
+          'https://api.openai.com/v1/chat/completions',
+          {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${openaiKey}`,
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${openaiKey}`,
             },
             body: JSON.stringify({
-                model: model,
-                messages: message,
-                stream: true
+              model: useModel,
+              messages: message,
+              stream: true,
+              max_tokens: 4096,
             }),
             signal: signal,
-        });
+          }
+        );
         if (!response.body) {
             sendToContentScript(port, 'stream', {
                 status: 'stream',
@@ -209,15 +261,38 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: Input, abortCon
 
         // update history chat
         if (answer.length > 0) {
-            const chat = { question: input.text, answer: answer}
-            updateHistory(input.uuid, chat)
+            let chat
+            if (input.type === 'chatgpt-vision' && input.src) {
+                chat = {
+                    question: [
+                        {
+                            type: 'text',
+                            text: input.text,
+                        },
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: input.src,
+                        },
+                    }
+                ], answer: answer };
+                updateHistory(input.uuid, chat);
+            } else {
+                chat = { question: input.text, answer: answer };
+                updateHistory(input.uuid, chat);
+            }
+
+            //  const chat = { question: input.text, answer: answer };
+            //  updateHistory(input.uuid, chat);
+            
+            
 
             // send status done to content script
             sendToContentScript(port, 'stream', {
                     status: 'done',
                     id: id,
                     uuid: input.uuid,
-                    chat: chat,
+                    // chat: chat,
                     type: input.type || 'chatgpt-translate'
             });
         }
@@ -233,6 +308,62 @@ const chatGPTResponse = async (port: chrome.runtime.Port, input: Input, abortCon
 
 }
 
+const readText = async (
+  port: chrome.runtime.Port,
+  input: Input,
+  abortController: AbortController
+) => {
+  const { openaiKey, voice } = await getDataFromStorage();
+  const signal = abortController.signal;
+    try {
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${openaiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'tts-1',
+            voice: voice,
+            input: input.text,
+            // stream: true,
+          }),
+          signal: signal,
+        });
+        if (!response.ok) {
+           throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const stream = response.body;
+        const reader = stream.getReader()
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+                sendToContentScript(port, 'read', {
+                    status: 'done',
+                    type: 'chatgpt-read',
+                });
+                break;
+          }
+
+            // Send each chunk to the content script
+            const base64Chunk = btoa(String.fromCharCode.apply(null, value));
+            sendToContentScript(port, 'read', {
+              status: 'stream',
+              base64Chunk: base64Chunk,
+              type: 'chatgpt-read',
+            });
+        }
+    } catch (error) {
+        const errorMessage =
+            error.name === 'AbortError' ? 'Stopped generate' : error.message;
+            sendToContentScript(port, 'read', {
+            status: 'stop',
+            token: errorMessage,
+            type: input.type || 'chatgpt-read',
+            });
+    }
+};
 /**
  * Sends a message to the currently active tab in the current window.
  * @param message - The message to send to the active tab.
@@ -267,8 +398,10 @@ chrome.runtime.onConnect.addListener(port => {
                         // send image base64 to content script
                         sendToContentScript(port, 'capture', {dataUrl: dataUrl});
                     });
-                }  else {
-                    // TODO
+                }  else if (message.action === 'read') {
+                    await readText(port, message, abortController);
+                } else {
+                    // TOO: handle other action
                 }
             }
         });
@@ -301,6 +434,13 @@ chrome.contextMenus.create({
             parentId: 'chatgpt-wizard',
             title: 'Create your prompt (Cmd+Shift+P)',
             contexts: ['editable'],
+        });
+
+        chrome.contextMenus.create({
+          id: 'chatgpt-vision',
+          parentId: 'chatgpt-wizard',
+          title: 'Ask ChatGPT this image',
+          contexts: ['image'],
         });
 
         chrome.contextMenus.create({
@@ -342,38 +482,47 @@ chrome.contextMenus.create({
             title: 'Ask ChatGPT',
             contexts: ['selection'],
         });
+        chrome.contextMenus.create({
+          id: 'chatgpt-read',
+          parentId: 'chatgpt-wizard',
+          title: 'Read it',
+          contexts: ['selection'],
+        });
        
     }
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
     switch (info.menuItemId) {
-        case 'chatgpt-explain':
-            sendMessageToActiveTab({ type: 'chatgpt-explain' });
-            break;
-        case 'chatgpt-summarize':
-            sendMessageToActiveTab({ type: 'chatgpt-summarize' });
-            break;
-        case 'chatgpt-rewrite':
-            sendMessageToActiveTab({ type: 'chatgpt-rewrite' });
-            break;
-        case 'chatgpt-grammar':
-            sendMessageToActiveTab({ type: 'chatgpt-grammar' });
-            break;
-        case 'chatgpt-ask':
-            sendMessageToActiveTab({ type: 'chatgpt-ask' });
-            break;
-        case 'chatgpt-quiz-solver':
-            sendMessageToActiveTab({ type: 'chatgpt-quiz-solver' });
-            break;
-        case 'chatgpt-prompt':
-            if (info.editable) {
-                sendMessageToActiveTab({ type: 'chatgpt-prompt'});
-            }
-            break;
-        default:
-            sendMessageToActiveTab({ type: 'chatgpt-translate' });
-            break;
+      case 'chatgpt-explain':
+        sendMessageToActiveTab({ type: 'chatgpt-explain' });
+        break;
+      case 'chatgpt-summarize':
+        sendMessageToActiveTab({ type: 'chatgpt-summarize' });
+        break;
+      case 'chatgpt-rewrite':
+        sendMessageToActiveTab({ type: 'chatgpt-rewrite' });
+        break;
+      case 'chatgpt-grammar':
+        sendMessageToActiveTab({ type: 'chatgpt-grammar' });
+        break;
+      case 'chatgpt-ask':
+        sendMessageToActiveTab({ type: 'chatgpt-ask' });
+        break;
+      case 'chatgpt-quiz-solver':
+        sendMessageToActiveTab({ type: 'chatgpt-quiz-solver' });
+        break;
+      case 'chatgpt-prompt':
+        if (info.editable) {
+          sendMessageToActiveTab({ type: 'chatgpt-prompt' });
+        }
+        break;
+      case 'chatgpt-vision':
+        sendMessageToActiveTab({ type: 'chatgpt-vision' });
+        break;
+      default:
+        sendMessageToActiveTab({ type: 'chatgpt-translate' });
+        break;
     }
 });
 

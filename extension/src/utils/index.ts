@@ -1,21 +1,31 @@
-type QA = { question: string, answer: string }
+
+type QA = { question: string | Array<{
+        type: string;
+        text?: string;
+        image_url?: any
+      }>, answer: string }
 
 /**
  * Interface for storing local data related to OpenAI API key, language, and model settings.
  */
 export interface StorageLocal {
-    /** OpenAI API key */
-    openaiKey: string; 
-    /** User's native language */
-    nativeLang?: string; 
-    /** Setting for displaying a popup */
-    settingPopup?: string, 
-    /** Type of model being used */
-    type?: string, 
-    /** Name of the model being used */
-    model?: string, 
-    /** ID of the model being used */
-    id?: string
+  /** OpenAI API key */
+  openaiKey: string;
+  /** User's native language */
+  nativeLang?: string;
+  /** Setting for displaying a popup */
+  settingPopup?: string;
+  /** Type of model being used */
+  type?: string;
+  /** Name of the model being used */
+  model?: string;
+  /** ID of the model being used */
+  id?: string;
+  /** Voice to use for text-to-speech */
+  voice?: string;
+
+  /** gpt-4-vision-preview */
+  avaiableVisionModel?: boolean;
 }
 
 /**
@@ -317,22 +327,35 @@ export const generateID = (length: number): string => {
  * @returns A Promise that resolves to an object containing the retrieved data.
  */
 export const getDataFromStorage = (): Promise<StorageLocal> => new Promise((resolve, reject) => {
-    chrome.storage.local.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model', 'id'], async result => {
+    chrome.storage.local.get(
+      [
+        'nativeLang',
+        'settingPopup',
+        'openaiKey',
+        'type',
+        'model',
+        'id',
+        'voice',
+        'avaiableVisionModel',
+      ],
+      async (result) => {
         if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError)
+          reject(chrome.runtime.lastError);
         } else {
-
-            const openaiKey = await decrypt(result.openaiKey, result.id)
-            resolve({
-                openaiKey: openaiKey || '',
-                model: result.model || 'gpt-3.5-turbo',
-                nativeLang: result.nativeLang || 'en',
-                settingPopup: result.settingPopup || 'display_icon',
-                type: result.type || 'chatgpt-translate',
-                id: result.id,
-            })
+          const openaiKey = await decrypt(result.openaiKey, result.id);
+          resolve({
+            openaiKey: openaiKey || '',
+            model: result.model || 'gpt-3.5-turbo-1106',
+            nativeLang: result.nativeLang || 'en',
+            settingPopup: result.settingPopup || 'display_icon',
+            type: result.type || 'chatgpt-translate',
+            id: result.id,
+            voice: result.voice || 'alloy',
+            avaiableVisionModel: result.avaiableVisionModel || false,
+          });
         }
-    })
+      }
+    );
 })
 
 /**

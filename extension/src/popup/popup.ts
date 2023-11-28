@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const lang = document.getElementById('lang') as HTMLSelectElement
     const setting = document.getElementById('setting') as HTMLSelectElement
     const typeSelect = document.getElementById('type') as HTMLSelectElement
+    const voiceEl = document.getElementById('voice') as HTMLSelectElement
     const btnToggle = document.getElementById('btn-toggle') as HTMLSpanElement
     const eye = document.getElementById('eye') as HTMLImageElement
 
@@ -25,16 +26,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         openai.value = data.openaiKey
         setting.value = data.settingPopup
         typeSelect.value = data.type
+        voiceEl.value = data.voice || 'alloy';
 
         const models = await listModels(data.openaiKey)
+        let avaiableVisionModel = false;
         // add model
         for (const [, value] of Object.entries(models.data)) {
+            if (value.id === 'gpt-4-vision-preview') {
+               avaiableVisionModel = true;
+            }
+            
             const option = document.createElement('option')
             option.value = value.id
             option.text = value.id
             model.appendChild(option)
         }
-        model.value = data.model || 'gpt-3.5-turbo'
+
+        chrome.storage.local.set({
+          avaiableVisionModel,
+        });
+
+        model.value = data.model || 'gpt-3.5-turbo-1106';
 
         // set language
         for (const [, value] of Object.entries(iso6391Codes)) {
@@ -79,15 +91,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             openai.readOnly = true;
             const models = await listModels(openai.value)
+            let avaiableVisionModel = false;
             // add model
             for (const [, value] of Object.entries(models.data)) {
+                if (value.id === 'gpt-4-vision-preview') {
+                   avaiableVisionModel = true;
+                }
                 const option = document.createElement('option')
                 option.value = value.id
                 option.text = value.id
                 model.appendChild(option)
             }
             // set default value
-            model.value = 'gpt-3.5-turbo'
+            model.value = 'gpt-3.5-turbo-1106';
 
              // set language
             for (const [, value] of Object.entries(iso6391Codes)) {
@@ -114,13 +130,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // default value
             chrome.storage.local.set({
-                openaiKey,
-                id,
-                model: model.value,
-                nativeLang: navigatorLanguageCode,
-                settingPopup: 'display_icon',
-                type: 'chatgpt-translate',
-            })
+              openaiKey,
+              id,
+              avaiableVisionModel,
+              model: model.value,
+              nativeLang: navigatorLanguageCode,
+              settingPopup: 'display_icon',
+              voice: voiceEl.value,
+              type: 'chatgpt-translate',
+            });
 
         }
     }
@@ -130,6 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const nativeLang = lang.value
         const settingPopup = setting.value
         const type = typeSelect.value
+        const voice = voiceEl.value
 
         // check case edit
         const isValid = await validKey(openai.value)
@@ -149,6 +168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 settingPopup,
                 openaiKey,
                 type,
+                voice,
                 id,
                 model: model.value,
             })

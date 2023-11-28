@@ -2,9 +2,17 @@
 declare var Tesseract: any;
 
 import classes from './index.module.css';
+type Q =string| Array<{
+      type: string;
+      text?: string;
+      image_url?: any;
+    }>;
+type QA = {
+  question: Q;
+  answer: string;
+};
 
-type QA = { question: string, answer: string };
-type Status = 'stream' | 'done' | 'error'
+type Status = 'stream' | 'done' | 'error' | 'read'
 
 interface Coordinates {
     startX: number;
@@ -20,7 +28,7 @@ interface Message {
     id?: string;
     type?: string;
 }
-
+let currentImage: HTMLImageElement = null
 let iconDiv: HTMLElement = null
 let popupDiv: HTMLElement = null
 let port = null as chrome.runtime.Port
@@ -150,6 +158,7 @@ const subSummarize = 'gh-chatgpt-wizard-summarize'
 const subRewrite = 'gh-chatgpt-wizard-rewrite'
 const subGrammar = 'gh-chatgpt-wizard-grammar'
 const subAsk = 'gh-chatgpt-wizard-ask'
+const subRead = 'gh-chatgpt-wizard-read'
 const textareaID = 'gh-chatgpt-wizard-textarea'
 const popupID = 'gh-chatgpt-wizard-popup'
 const popupHeadID = 'gh-chatgpt-wizard-popup-head'
@@ -164,6 +173,7 @@ const askHeadID = 'gh-chatgpt-wizard-ask-head'
 const stopStreamID = 'gh-chatgpt-wizard-stop-stream'
 const overlayID = 'gh-chatgpt-wizard-overlay'
 const selectionID = 'gh-chatgpt-wizard-selection'
+const imagePreview = 'gh-chatgpt-wizard-image-preview'
 const contentWidth = 500
 const contentAskWidth = 500
 
@@ -177,6 +187,7 @@ const iconGrammar = chrome.runtime.getURL('icons/icon-grammar.svg')
 const iconAsk = chrome.runtime.getURL('icons/icon-ask.svg')
 const iconClose = chrome.runtime.getURL('icons/close.svg')
 const iconCopy = chrome.runtime.getURL('icons/copy.svg')
+const iconRead = chrome.runtime.getURL('icons/icon-read.svg')
 
 const base64ToBlob = (base64: string, mimeType: string) => {
   let byteString = atob(base64.split(',')[1]);
@@ -216,22 +227,45 @@ const removeChatHistory = (uuidKey: string): Promise<void> => {
  * Retrieves data from local storage.
  * @returns A promise that resolves to an object containing the retrieved data.
  */
-const getDataFromStorage = (): Promise<{ openaiKey: string; nativeLang?: string; settingPopup?: string, type?: string, model?: string, id?: string }> => new Promise((resolve, reject) => {
-    chrome.storage.local.get(['nativeLang', 'settingPopup', 'openaiKey', 'type', 'model', 'id'], result => {
+const getDataFromStorage = (): Promise<{
+  openaiKey: string;
+  nativeLang?: string;
+  settingPopup?: string;
+  type?: string;
+  model?: string;
+  id?: string;
+  voice?: string;
+  avaiableVisionModel?: boolean}> =>
+  new Promise((resolve, reject) => {
+    chrome.storage.local.get(
+      [
+        'nativeLang',
+        'settingPopup',
+        'openaiKey',
+        'type',
+        'model',
+        'id',
+        'voice',
+        'avaiableVisionModel',
+      ],
+      (result) => {
         if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError)
+          reject(chrome.runtime.lastError);
         } else {
-            resolve({
-                openaiKey: result.openaiKey || '',
-                model: result.model || 'gpt-3.5-turbo',
-                nativeLang: result.nativeLang || 'en',
-                settingPopup: result.settingPopup || 'display_icon',
-                type: result.type || 'chatgpt-translate',
-                id: result.id || 'default'
-            })
+          resolve({
+            openaiKey: result.openaiKey || '',
+            model: result.model || 'gpt-3.5-turbo-1106',
+            nativeLang: result.nativeLang || 'en',
+            settingPopup: result.settingPopup || 'display_icon',
+            type: result.type || 'chatgpt-translate',
+            id: result.id || 'default',
+            voice: result.voice || 'alloy',
+            avaiableVisionModel: result.avaiableVisionModel || false,
+          });
         }
-    })
-})
+      }
+    );
+  });
 
 /**
  * Handles the answer message received from the server and updates the chat UI accordingly.
@@ -271,7 +305,7 @@ const handleAnswer = (message: Message, activeElement: HTMLElement) => {
             if (currentDomain === 'mail.google.com') {
                 activeElement.innerText += message.token;
             } else if (currentDomain === 'www.facebook.com') {
-               
+               // TODO
             }
 
         } else if (activeElement instanceof HTMLTextAreaElement) {
@@ -440,7 +474,7 @@ const iconHtml = () => {
     return `<img id="${defaultID}" class="${classes.icon}" atl="ChatGPT Extension" src="${icon64URL}" />
     <div id="${menuID}" class="${classes.menu}">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M1 4L6 9L11 4H1Z" fill="#12a37f"></path>
+            <path d="M1 4L6 9L11 4H1Z" fill="#c398d1"></path>
         </svg>
         <div id="${subMenuID}" class="${classes.menuBox}">
             <span class="${classes.menuTitle}">Quick features</span>
@@ -480,8 +514,14 @@ const iconHtml = () => {
                     <span style="padding-left: 8px; color: #000;font-size: 14px;">Ask ChatGPT</span>
                 </div>
             </div>
+            <div id="${subRead}" class="${classes.menuItem}">
+                <div class="${classes.iconItem}">
+                    <img style="width: 15px; height: 15px;  margin: 0;" alt="Read it" src="${iconRead}"></img>
+                    <span style="padding-left: 8px; color: #000;font-size: 14px;">Read it</span>
+                </div>
+            </div>
         </div>
-    </div>`
+    </div>`;
 }
 
 const promptHtml = (nativeLang: string) => {
@@ -527,7 +567,6 @@ const promptHtml = (nativeLang: string) => {
                 Powered by ChatGPT Wizard
             </div>
             `
-
 }
 
 /**
@@ -638,7 +677,7 @@ const htmlAskPopup = (text: string) => {
                     <div id="${boxChatID}" class="${classes.boxChatAskBody}"></div>
                     <div id="${footerID}" class="${classes.popupFooterAsk}">
                         <div class="${classes.popupInput}">
-                            <textarea id="${textareaID}" rows="1" class="${classes.questionInput}" placeholder="Ask ChatGPT">${text}</textarea>
+                            <textarea id="${textareaID}" rows="1" class="${classes.questionInput}" placeholder="Ask ChatGPT">${text || ''}</textarea>
                             <div id="${btnSendID}" class="${classes.btnSend}">
                                 <svg
                                     style="width: 24px; height: 24px;"
@@ -663,6 +702,46 @@ const htmlAskPopup = (text: string) => {
                 
             </div>`
 }
+
+const htmlVisionPopup = (src?: string) => {
+  return `<div class="${classes.popupAsk}">
+                <div id="${askHeadID}" title="Click to hide" isShow="true" class="${classes.popupHeadAsk}">
+                    <div style="display: flex;align-items: center;">
+                        <image style="width: 32px; height: 32px; margin: 0; filter: none" src="${icon64URL}" alt=${`Ask ChatGPT`} />
+                        <p class="${classes.popupTitle}">Ask ChatGPT</p>
+                    </div>
+                    <img title="Close" id="${iconCloseID}" class="${classes.iconCloseAsk}" alt="Close" src="${iconClose}" />
+                </div>
+                <div class="${classes.boxChatAsk}">
+                    <div id="${boxChatID}" class="${classes.boxChatAskBody}" style="position: relative; height: 100%;">
+                            <img id="${imagePreview}" class="${classes.imagePreview}" src="${src}" />
+                        </div>
+                    <div id="${footerID}" class="${classes.popupFooterAsk}">
+                        <div class="${classes.popupInput}">
+                            <textarea id="${textareaID}" rows="1" class="${classes.questionInput}" placeholder="Ask ChatGPT"></textarea>
+                            <div id="${btnSendID}" class="${classes.btnSend}">
+                                <svg
+                                    style="width: 24px; height: 24px;"
+                                    xmlns='http://www.w3.org/2000/svg'
+                                    className='h-5 w-5 transform rotate-45'
+                                    viewBox='0 0 24 24'
+                                    fill='none'
+                                    stroke='#01539d' // change color at here
+                                    strokeWidth='2'
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    >
+                                    <line x1='22' y1='2' x2='11' y2='13' />
+                                    <polygon points='22 2 15 22 11 13 2 9 22 2' />
+                                </svg>
+                            </div>
+                        </div>
+                        <p style="margin-top: 5px; margin-bottom: 0"> Powered by ChatGPT Wizard</p>   
+                    </div>
+                </div>
+                
+            </div>`;
+};
 
 /**
  * Generates HTML for the Quiz Slover popup.
@@ -741,7 +820,7 @@ const updateHeight = () => {
  * @param language - The language to translate to. Default is 'en'.
  * @returns void
  */
-const chatGPT = async (text: string, type = 'chatgpt-translate', language = 'en', activeElement?: HTMLElement, tone?: string) => {
+const chatGPT = async (text: string, type = 'chatgpt-translate', language = 'en', activeElement?: HTMLElement, tone?: string, src?: string) => {
     const uuid = document.getElementById(popupID).getAttribute('uuid')
     currentPortName = `content-script-${uuid}`
     
@@ -749,7 +828,7 @@ const chatGPT = async (text: string, type = 'chatgpt-translate', language = 'en'
         name: currentPortName,
     })
     const action = 'stream'
-    port.postMessage({text, uuid, type, action, language, tone})
+    port.postMessage({ text, uuid, type, action, language, tone, src });
     port.onMessage.addListener(async (data: any) => {
         if (data.action === 'stream' && data.portName === currentPortName) {
             setResponseToPopup(data.message, activeElement)
@@ -757,10 +836,144 @@ const chatGPT = async (text: string, type = 'chatgpt-translate', language = 'en'
     })
 }
 
+// This function not smooth
+
+// const chatGPTRead = async (text: string) => {
+//   const uuid = document.getElementById(popupID).getAttribute('uuid');
+//   const currentPortName = `content-script-${uuid}`;
+//   const port = chrome.runtime.connect({ name: currentPortName });
+
+//   const audioContext = new AudioContext();
+//   let audioBufferQueue: AudioBuffer[] = [];
+//   let isBuffering = false;
+//   let isPlaying = false;
+//   const playbackRate = 1.0;
+//   let totalBufferSize = 0;
+//   const minBufferSize = 1; // Adjust this value if necessary
+
+//   const playFromQueue = async () => {
+//     if (audioBufferQueue.length === 0) {
+//       isBuffering = false;
+//       return;
+//     }
+
+//     isBuffering = true;
+//     const audioBuffer = audioBufferQueue.shift();
+//     totalBufferSize -= audioBuffer.duration;
+
+//     const source = audioContext.createBufferSource();
+//     source.buffer = audioBuffer;
+//     source.playbackRate.value = playbackRate;
+//     source.connect(audioContext.destination);
+//     source.start(0);
+//     isPlaying = true;
+
+//     source.onended = () => {
+//       isPlaying = false;
+//       if (audioBufferQueue.length > 0 || totalBufferSize >= minBufferSize) {
+//         playFromQueue();
+//       }
+//     };
+//   };
+
+//   const addToBufferQueue = async (audioData: Uint8Array) => {
+//     try {
+//       const audioBuffer = await audioContext.decodeAudioData(audioData.buffer);
+//       audioBufferQueue.push(audioBuffer);
+//       totalBufferSize += audioBuffer.duration;
+
+//       if (!isPlaying && totalBufferSize >= minBufferSize) {
+//         playFromQueue();
+//       }
+//     } catch (error) {
+//       console.error('Error in decoding audio data:', error);
+//     }
+//   };
+
+//   port.onMessage.addListener((data) => {
+//     if (data.action === 'read' && data.portName === currentPortName) {
+//       try {
+//         const decodedChunk = Uint8Array.from(
+//           atob(data.message.base64Chunk),
+//           (c) => c.charCodeAt(0)
+//         );
+//         addToBufferQueue(decodedChunk);
+//       } catch (error) {
+//         console.error('Error decoding base64 string:', error);
+//       }
+//     }
+//   });
+
+//   port.postMessage({ text, uuid, action: 'read' });
+// };
+
+
+const chatGPTRead = async (text: string) => {
+  const uuid = document.getElementById(popupID).getAttribute('uuid');
+  const currentPortName = `content-script-${uuid}`;
+  const port = chrome.runtime.connect({ name: currentPortName });
+  const action = 'read';
+  port.postMessage({ text, uuid, action });
+
+  const audioContext = new AudioContext();
+  let audioChunks: Uint8Array[] = []; // Store chunks of audio data here
+
+  // Function to play audio from the accumulated chunks
+  const playAudio = async () => {
+    const audioBuffer = await audioContext.decodeAudioData(
+      concatenateUint8Arrays(audioChunks).buffer
+    );
+
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.start();
+   
+  };
+
+  // Helper function to concatenate Uint8Array
+  const concatenateUint8Arrays = (arrays: Uint8Array[]) => {
+    let totalLength = arrays.reduce(
+      (acc, value) => acc + value.length,
+      0
+    );
+    let result = new Uint8Array(totalLength);
+    let length = 0;
+    for (let array of arrays) {
+      result.set(array, length);
+      length += array.length;
+    }
+    return result;
+  };
+
+  port.onMessage.addListener(async (data) => {
+      if (data.action === 'read' && data.portName === currentPortName) {
+        if (data.message.status === 'stop') {
+            removeIcon()
+            alert(data?.message?.token ? data?.message?.token : 'Error while reading text')
+        }
+        else if (data.message.status === 'done') {
+          playAudio();
+          // remove stop stream
+          removePopup();
+        } else {
+            // Accumulate audio data
+            const decodedChunk = Uint8Array.from(
+            atob(data.message.base64Chunk),
+            (c) => c.charCodeAt(0)
+            );
+            audioChunks.push(decodedChunk);
+        }
+    }
+  });
+};
+
 /**
  * Handles sending a chat message.
  */
-const handleSendChat = () => {
+const handleSendChat = async () => {
+    const {nativeLang} = await getDataFromStorage()
+    const type = document.getElementById(popupID).getAttribute('type') || 'chatgpt-ask';
     const inputEl = document.getElementById(textareaID) as HTMLTextAreaElement
     const question = inputEl.value.trim()
     if (question.length === 0) return
@@ -770,13 +983,34 @@ const handleSendChat = () => {
     inputEl.style.height = '45px'
     boxChat.style.height = 'calc(100% - 45px)'
 
-    boxChat.innerHTML += `<div  class="${classes.question}">
-                            <div class="${classes.questionDetail}">${question}</div>
-                        </div>
+    const img = document.getElementById(imagePreview) as HTMLImageElement
+    if (img) {
+        document.getElementById(imagePreview)?.remove();
+        boxChat.innerHTML += `<div  class="${classes.question}" style="margin-bottom: 5px;">
+                                    <div style="max-width: 84%;max-height: 200px;">
+                                        <img style="width: 100%; height: 100%; object-fit:contain; border-radius: 8px;" src=${
+                                          img.src
+                                        } />
+                                    </div>
+                                </div>
+                                <div class="${classes.question}">
+                                    <div class="${classes.questionDetail}">${question}</div>
+                                </div>
                         ${htmlAnswerItem()}
-                        `
-    chatGPT(question, 'chatgpt-ask')
+                        `;
+        chatGPT(question, type, nativeLang, undefined, undefined, img.src);
+    } else {
+         boxChat.innerHTML += `<div  class="${classes.question}">
+                                <div class="${classes.questionDetail}">${question}</div>
+                            </div>
+                            ${htmlAnswerItem()}
+                            `;
+         chatGPT(question, type);
+    }
+   
+   
 }
+
 
 const enableDrag = () => {
     const popup = document.getElementById(popupID)
@@ -845,7 +1079,8 @@ const handleGenerate = async (prompt: string, activeElement: HTMLElement ) => {
 const initPopup = async (type: string, data: {
     text?: string,
     selectedTextRect?: DOMRect,
-    coords?: Coordinates
+    coords?: Coordinates,
+    src?: string,
 }) => {
     const {text, selectedTextRect} = data
 
@@ -860,86 +1095,18 @@ const initPopup = async (type: string, data: {
     popupDiv.id = popupID;
     if (type === 'chatgpt-ask') {
         popupDiv.style.position = 'fixed'
-        popupDiv.style.top = '0'
-        popupDiv.style.bottom = 'auto'
+        popupDiv.style.top = 'auto'
+        popupDiv.style.bottom = '0'
         popupDiv.style.right = '0'
-        popupDiv.style.height = '100%'
+        popupDiv.style.height = '600px'
         popupDiv.style.borderTopRightRadius = '0'
         popupDiv.style.borderBottomRightRadius = '0'
         popupDiv.style.width = `${contentAskWidth}px`
         popupDiv.innerHTML = htmlAskPopup(text)
-
-        // event handle Input
-        setTimeout(() => {
-            const inputEl = document.getElementById(textareaID) as HTMLTextAreaElement
-            if (inputEl) {
-                // set focus
-                inputEl.value += '\n';
-                setTimeout(updateHeight, 5);
-                const len = inputEl.value.length;
-                inputEl.selectionStart = len;
-                inputEl.selectionEnd = len;
-                inputEl.focus()
-                
-                inputEl.oninput = () => {
-                    setTimeout(updateHeight, 5);
-                }
-
-                // event send message to chatgpt
-                inputEl.onkeydown = (e: KeyboardEvent) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault(); // Prevents adding a newline to the textarea
-                        setTimeout(handleSendChat, 5);
-                    }
-                };
-                const btnSendEl = document.getElementById(btnSendID) as HTMLElement
-                if (btnSendEl) {
-                    btnSendEl.onclick = () => {
-                        setTimeout(handleSendChat, 5);
-                    }
-                }
-                const popupEl = document.getElementById(popupID) as HTMLElement
-
-                // event close
-                const btnCloseEl = document.getElementById(iconCloseID) as HTMLImageElement
-                if (btnCloseEl) {
-                    btnCloseEl.onclick = (e: Event) => {
-                        e.stopPropagation();
-                        // remove chat history
-                        const uuid = popupEl.getAttribute('uuid')
-                        removeChatHistory(uuid)
-                        // close popup
-                        removeIconAndPopup()
-                        
-                    }
-                }
-                // toggle click head ask chatGPT
-                const askHeadEl = document.getElementById(askHeadID) as HTMLElement
-                if (askHeadEl) {
-                    askHeadEl.addEventListener('click', () => {
-                        const isShow = askHeadEl.getAttribute('isShow')
-                        if (isShow === "true") {
-                            popupEl.style.top = 'auto';
-                            popupEl.style.bottom = '0';
-                            popupEl.style.height = '50px';
-                            popupEl.style.width = '210px';
-                            askHeadEl.setAttribute('isShow', "false")
-                            askHeadEl.setAttribute('title', "Click to show")
-                        } else {
-                            popupEl.style.top = '0';
-                            popupEl.style.bottom = 'auto';
-                            popupEl.style.height = '100%';
-                            popupEl.style.width = `${contentAskWidth}px`;
-                            askHeadEl.setAttribute('isShow', "true")
-                            askHeadEl.setAttribute('title', "Click to hide")
-                            inputEl.focus()
-                        }                       
-                    })
-                }
-            }  
-        }, 5);
-                   
-    } else  {
+         
+    } else if (type === 'chatgpt-read') {
+        popupDiv.style.display = 'none'
+    } else {
         popupDiv.style.position = 'absolute';
         popupDiv.draggable = false;
         popupDiv.style.left = `${position.left}px`;
@@ -949,6 +1116,81 @@ const initPopup = async (type: string, data: {
     }
    
     document.body.appendChild(popupDiv);
+
+    if (type === 'chatgpt-ask') {
+        // event handle Input
+        setTimeout(() => {
+            const inputEl = document.getElementById(
+            textareaID
+            ) as HTMLTextAreaElement;
+            if (inputEl) {
+            // set focus
+            inputEl.value += '\n';
+            setTimeout(updateHeight, 5);
+            const len = inputEl.value.length;
+            inputEl.selectionStart = len;
+            inputEl.selectionEnd = len;
+            inputEl.focus();
+
+            inputEl.oninput = () => {
+                setTimeout(updateHeight, 5);
+            };
+
+            // event send message to chatgpt
+            inputEl.onkeydown = (e: KeyboardEvent) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Prevents adding a newline to the textarea
+                setTimeout(handleSendChat, 5);
+                }
+            };
+            const btnSendEl = document.getElementById(btnSendID) as HTMLElement;
+            if (btnSendEl) {
+                btnSendEl.onclick = () => {
+                setTimeout(handleSendChat, 5);
+                };
+            }
+            const popupEl = document.getElementById(popupID) as HTMLElement;
+
+            // event close
+            const btnCloseEl = document.getElementById(
+                iconCloseID
+            ) as HTMLImageElement;
+            if (btnCloseEl) {
+                btnCloseEl.onclick = (e: Event) => {
+                e.stopPropagation();
+                // remove chat history
+                const uuid = popupEl.getAttribute('uuid');
+                removeChatHistory(uuid);
+                // close popup
+                removeIconAndPopup();
+                };
+            }
+            // toggle click head ask chatGPT
+            const askHeadEl = document.getElementById(askHeadID) as HTMLElement;
+            if (askHeadEl) {
+                askHeadEl.addEventListener('click', () => {
+                const isShow = askHeadEl.getAttribute('isShow');
+                if (isShow === 'true') {
+                    popupEl.style.top = 'auto';
+                    popupEl.style.bottom = '0';
+                    popupEl.style.height = '50px';
+                    popupEl.style.width = '210px';
+                    askHeadEl.setAttribute('isShow', 'false');
+                    askHeadEl.setAttribute('title', 'Click to show');
+                } else {
+                    popupEl.style.top = 'auto';
+                    popupEl.style.bottom = '0';
+                    popupEl.style.height = '600px';
+                    popupEl.style.width = `${contentAskWidth}px`;
+                    askHeadEl.setAttribute('isShow', 'true');
+                    askHeadEl.setAttribute('title', 'Click to hide');
+                    inputEl.focus();
+                }
+                });
+            }
+            }
+        }, 5);
+    }
     // set type poupup
     document.getElementById(popupID).setAttribute('type', type)
 
@@ -957,12 +1199,12 @@ const initPopup = async (type: string, data: {
     document.getElementById(popupID).setAttribute('uuid', uuid)
 
     // add draggable
-    if (type !== 'chatgpt-ask') {
+    if (type !== 'chatgpt-ask' && type !== 'chatgpt-read') {
         enableDrag()
     }
 
      // event onChange language
-    if (type !== 'chatgpt-ask' && type !== 'chatgpt-grammar') {
+    if (type !== 'chatgpt-ask' && type !== 'chatgpt-grammar' && type !== 'chatgpt-read') {
         const langEl = document.getElementById(languageID)
         if (langEl) {
             langEl.addEventListener('change', (event: Event) => {
@@ -996,8 +1238,8 @@ const initPopup = async (type: string, data: {
 }
 
 /**
- * Initializes the popup quiz by creating a div element and appending it to the document body.
- * @returns {Promise<void>}
+ * Sets the response from GPT to the popup.
+ * @param response - The response from GPT.
  */
 const initPopupQuiz = async () => {
     const {nativeLang} = await getDataFromStorage()
@@ -1069,8 +1311,6 @@ const initPopupPrompt = async (activeElement: HTMLElement) => {
     
     document.body.appendChild(popupDiv);
 
-
-   
     // set type poupup
     document.getElementById(popupID).setAttribute('type', 'chatgpt-prompt')
     // set uuid poupup
@@ -1102,6 +1342,104 @@ const initPopupPrompt = async (activeElement: HTMLElement) => {
         }
     }
 }
+
+const initPopupAskImage = async (src: string) => {
+    
+    // Create the popupDiv and set its styles
+    popupDiv = document.createElement('div');
+
+    popupDiv.className = classes.chatgptPopup;
+    popupDiv.id = popupID;
+
+    popupDiv.style.position = 'fixed';
+    popupDiv.style.top = 'auto';
+    popupDiv.style.bottom = '0';
+    popupDiv.style.right = '0';
+    popupDiv.style.height = '600px';
+    popupDiv.style.borderTopRightRadius = '0';
+    popupDiv.style.borderBottomRightRadius = '0';
+    popupDiv.style.width = `${contentAskWidth}px`;
+    popupDiv.innerHTML = htmlVisionPopup(src);
+
+    document.body.appendChild(popupDiv);
+    
+    // event handle Input
+    setTimeout(() => {
+      const inputEl = document.getElementById(
+        textareaID
+      ) as HTMLTextAreaElement;
+      if (inputEl) {
+        // set focus
+        inputEl.focus();
+
+        inputEl.oninput = () => {
+          setTimeout(updateHeight, 5);
+        };
+
+        // event send message to chatgpt
+        inputEl.onkeydown = (e: KeyboardEvent) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // Prevents adding a newline to the textarea
+            setTimeout(handleSendChat, 5);
+          }
+        };
+        const btnSendEl = document.getElementById(btnSendID) as HTMLElement;
+        if (btnSendEl) {
+          btnSendEl.onclick = () => {
+            setTimeout(handleSendChat, 5);
+          };
+        }
+        const popupEl = document.getElementById(popupID) as HTMLElement;
+
+        // event close
+        const btnCloseEl = document.getElementById(
+          iconCloseID
+        ) as HTMLImageElement;
+        if (btnCloseEl) {
+          btnCloseEl.onclick = (e: Event) => {
+            e.stopPropagation();
+            // remove chat history
+            const uuid = popupEl.getAttribute('uuid');
+            removeChatHistory(uuid);
+            // close popup
+            removeIconAndPopup();
+          };
+        }
+        // toggle click head ask chatGPT
+        const askHeadEl = document.getElementById(askHeadID) as HTMLElement;
+        if (askHeadEl) {
+          askHeadEl.addEventListener('click', () => {
+            const isShow = askHeadEl.getAttribute('isShow');
+            if (isShow === 'true') {
+              popupEl.style.top = 'auto';
+              popupEl.style.bottom = '0';
+              popupEl.style.height = '50px';
+              popupEl.style.width = '210px';
+              askHeadEl.setAttribute('isShow', 'false');
+              askHeadEl.setAttribute('title', 'Click to show');
+            } else {
+              popupEl.style.top = 'auto';
+              popupEl.style.bottom = '0';
+              popupEl.style.height = '600px';
+              popupEl.style.width = `${contentAskWidth}px`;
+              askHeadEl.setAttribute('isShow', 'true');
+              askHeadEl.setAttribute('title', 'Click to hide');
+              inputEl.focus();
+            }
+          });
+        }
+      }
+    }, 5);
+
+    // set type poupup
+    document.getElementById(popupID).setAttribute('type', 'chatgpt-vision');
+    // set uuid poupup
+    const uuid =
+        Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15);
+    document.getElementById(popupID).setAttribute('uuid', uuid);
+
+};
 
 /**
  * Captures a screenshot of a selected area and performs OCR on the image using Tesseract.
@@ -1451,6 +1789,19 @@ document.addEventListener('mouseup', async () => {
                                 }
                             }
 
+                            const readEl = document.getElementById(subRead);
+                            if (readEl) {
+                              readEl.onclick = async () => {
+                                  removeIcon();
+                                  
+                                await initPopup('chatgpt-read', {
+                                  text: selectionText,
+                                  selectedTextRect: selectionRect,
+                                });
+                                chatGPTRead(selectionText);
+                              };
+                            }
+
                         }
                     }
                 }
@@ -1483,7 +1834,7 @@ document.addEventListener('click', async (evt: MouseEvent) => {
                 setTimeout(() => {
                     document.getElementById(stopStreamID)?.remove()
 
-                    if (type === 'chatgpt-prompt') {
+                    if (type === 'chatgpt-prompt' || type === 'chatgpt-read') {
                         removePopup()
                     }
                 }, 5)
@@ -1547,7 +1898,26 @@ chrome.runtime.onMessage.addListener(async (data: any) => {
                 await initPopupPrompt(activeElement)
             }
         }
+    } else if (data.type === 'chatgpt-vision') {
 
+      const { avaiableVisionModel } = await getDataFromStorage();
+      if (!avaiableVisionModel) {
+        alert('Your account does not support that function. Please upgrade your account');
+        currentImage = null
+        return
+      }
+        
+      if (currentImage) {
+        let src = currentImage.getAttribute('src');
+        if (src.startsWith('/') && !src.startsWith('//')) {
+          const currentDomain = window.location.hostname;
+          src = `https://${currentDomain}${src}`;
+        }
+        if (src) {
+          await initPopupAskImage(src);
+          currentImage = null;
+        }
+      }
     } else {
         const selection = document.getSelection();
         await initPopup(data.type, {
@@ -1557,22 +1927,30 @@ chrome.runtime.onMessage.addListener(async (data: any) => {
         if (data.type !== 'chatgpt-ask' && data.type !== 'chatgpt-quiz-solver') {
             chatGPT(selection.toString(), data.type)
         }
+         if (
+           data.type !== 'chatgpt-read') {
+           chatGPTRead(selection.toString());
+         }
     }
 })
 
 // Right click
-document.addEventListener('contextmenu', () => {
-    removeIcon()
-    document.getElementById(overlayID)?.remove()
-    document.getElementById(selectionID)?.remove()
+document.addEventListener('contextmenu', (event: any) => {
+    removeIcon();
+    document.getElementById(overlayID)?.remove();
+    document.getElementById(selectionID)?.remove();
 
-    // const popup = document.getElementById(popupID) as HTMLElement
-    // if (popup) {
-    //     const type = popup.getAttribute('type')
-    //     if (type !== 'chatgpt-ask') {
-    //         removeIconAndPopup()  
-    //     }
-    // } else {
-    //     removeIconAndPopup()  
-    // }
-})
+    // check if right click on image
+    if (event.target.tagName) {
+        currentImage = event.target;
+    }
+  // const popup = document.getElementById(popupID) as HTMLElement
+  // if (popup) {
+  //     const type = popup.getAttribute('type')
+  //     if (type !== 'chatgpt-ask') {
+  //         removeIconAndPopup()
+  //     }
+  // } else {
+  //     removeIconAndPopup()
+  // }
+});
