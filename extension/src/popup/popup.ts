@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             errorDiv.style.display = 'block'
             return
         }
-        if (openai.value.length !== 51 || !openai.value.startsWith('sk-')) {
+        if (!openai.value.startsWith('sk-')) {
             errorDiv.innerText = 'Invalid API key'
             errorDiv.style.display = 'block'
             return
